@@ -173,7 +173,7 @@ static int sl_nand_init(SysBusDevice *dev) {
     s = FROM_SYSBUS(SLNANDState, dev);
 
     s->ctl = 0;
-    s->nand = nand_init(s->manf_id, s->chip_id);
+    s->nand = nand_init(s->manf_id, s->chip_id, drive_get(IF_MTD, 0, 0));
 
     iomemtype = cpu_register_io_memory(sl_readfn,
                     sl_writefn, s, DEVICE_NATIVE_ENDIAN);
