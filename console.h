@@ -12,6 +12,7 @@
 #define MOUSE_EVENT_LBUTTON 0x01
 #define MOUSE_EVENT_RBUTTON 0x02
 #define MOUSE_EVENT_MBUTTON 0x04
+extern int multitouch_enabled;
 
 /* identical to the ps/2 keyboard bits */
 #define QEMU_SCROLL_LOCK_LED (1 << 0)
@@ -20,6 +21,10 @@
 
 /* in ms */
 #define GUI_REFRESH_INTERVAL 30
+
+typedef int QEMUDisplayCloseCallback(void *opaque);
+void qemu_set_display_close_handler(QEMUDisplayCloseCallback *cb, void *opaque);
+int qemu_run_display_close_handler(void);
 
 typedef void QEMUPutKBDEvent(void *opaque, int keycode);
 typedef void QEMUPutLEDEvent(void *opaque, int ledstate);
@@ -37,6 +42,14 @@ typedef struct QEMUPutMouseEntry {
     QTAILQ_ENTRY(QEMUPutMouseEntry) node;
 } QEMUPutMouseEntry;
 
+typedef struct QEMUPutKBDEntry {
+    QEMUPutKBDEvent *put_kbd_event;
+    void *opaque;
+
+    /* used internally by qemu for handling keyboards */
+    QTAILQ_ENTRY(QEMUPutKBDEntry) next;
+} QEMUPutKBDEntry;
+
 typedef struct QEMUPutLEDEntry {
     QEMUPutLEDEvent *put_led;
     void *opaque;
@@ -44,7 +57,7 @@ typedef struct QEMUPutLEDEntry {
 } QEMUPutLEDEntry;
 
 void qemu_add_kbd_event_handler(QEMUPutKBDEvent *func, void *opaque);
-void qemu_remove_kbd_event_handler(void);
+void qemu_remove_kbd_event_handler(QEMUPutKBDEvent *func, void *opaque);
 QEMUPutMouseEntry *qemu_add_mouse_event_handler(QEMUPutMouseEvent *func,
                                                 void *opaque, int absolute,
                                                 const char *name);
