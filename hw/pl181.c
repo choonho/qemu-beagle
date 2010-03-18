@@ -458,7 +458,7 @@ static int pl181_init(SysBusDevice *dev)
     sysbus_init_irq(dev, &s->irq[0]);
     sysbus_init_irq(dev, &s->irq[1]);
     dinfo = drive_get_next(IF_SD);
-    s->card = sd_init(dinfo ? dinfo->bdrv : NULL, 0);
+    s->card = sd_init(dinfo ? dinfo->bdrv : NULL, 0, 0);
     qemu_register_reset(pl181_reset, s);
     pl181_reset(s);
     /* ??? Save/restore.  */
