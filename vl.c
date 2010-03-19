@@ -1941,6 +1941,7 @@ int main(int argc, char **argv, char **envp)
     const char *incoming = NULL;
     int show_vnc_port = 0;
     int defconfig = 1;
+    int sd_device_index = 0;
 
 #ifdef CONFIG_SIMPLE_TRACE
     const char *trace_file = NULL;
@@ -2092,7 +2093,7 @@ int main(int argc, char **argv, char **envp)
                 drive_add(IF_MTD, -1, optarg, MTD_OPTS);
                 break;
             case QEMU_OPTION_sd:
-                drive_add(IF_SD, 0, optarg, SD_OPTS);
+                drive_add(IF_SD, sd_device_index++, optarg, SD_OPTS);
                 break;
             case QEMU_OPTION_pflash:
                 drive_add(IF_PFLASH, -1, optarg, PFLASH_OPTS);
