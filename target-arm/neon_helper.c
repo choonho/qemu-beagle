@@ -29,6 +29,11 @@ static inline float32 vfp_itos(uint32_t i)
         float32 s;
     } v;
 
+    /* flush-to-zero */
+    if (!(i & (0xff << 23))) {
+        i &= 1 << 31; /* make it +-0 */
+    }
+
     v.i = i;
     return v.s;
 }
