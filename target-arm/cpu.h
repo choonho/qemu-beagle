@@ -133,6 +133,9 @@ typedef struct CPUARMState {
         uint32_t c7_par;  /* Translation result. */
         uint32_t c9_insn; /* Cache lockdown registers.  */
         uint32_t c9_data;
+        uint32_t c9_pmcr_data; /* Performance Monitor Control Register */
+        uint32_t c9_useren; /* user enable register */
+        uint32_t c9_inten; /* interrupt enable set/clear register */
         uint32_t c12_vbar; /* secure/nonsecure vector base address register. */
         uint32_t c12_mvbar; /* monitor vector base address register. */
         uint32_t c13_fcse; /* FCSE PID.  */
