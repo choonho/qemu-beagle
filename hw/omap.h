@@ -890,9 +890,6 @@ void omap_uart_attach(struct omap_uart_s *s, CharDriverState *chr,
                       const char *label);
 
 struct omap_mpuio_s;
-struct omap_mpuio_s *omap_mpuio_init(target_phys_addr_t base,
-                qemu_irq kbd_int, qemu_irq gpio_int, qemu_irq wakeup,
-                omap_clk clk);
 qemu_irq *omap_mpuio_in_get(struct omap_mpuio_s *s);
 void omap_mpuio_out_set(struct omap_mpuio_s *s, int line, qemu_irq handler);
 void omap_mpuio_key(struct omap_mpuio_s *s, int row, int col, int down);
@@ -903,8 +900,6 @@ struct uWireSlave {
     void *opaque;
 };
 struct omap_uwire_s;
-struct omap_uwire_s *omap_uwire_init(target_phys_addr_t base,
-                qemu_irq *irq, qemu_irq dma, omap_clk clk);
 void omap_uwire_attach(struct omap_uwire_s *s,
                 uWireSlave *slave, int chipselect);
 
@@ -1084,21 +1079,9 @@ struct omap_mpu_state_s {
 
     struct omap_uwire_s *microwire;
 
-    struct {
-        uint8_t output;
-        uint8_t level;
-        uint8_t enable;
-        int clk;
-    } pwl;
-
-    struct {
-        uint8_t frc;
-        uint8_t vrc;
-        uint8_t gcr;
-        omap_clk clk;
-    } pwt;
-
-    struct omap_i2c_s *i2c[2];
+    struct omap_pwl_s *pwl;
+    struct omap_pwt_s *pwt;
+    struct omap_i2c_s *i2c[3];
 
     struct omap_rtc_s *rtc;
 
@@ -1135,27 +1118,10 @@ struct omap_mpu_state_s {
 
     uint32_t tcmi_regs[17];
 
-    struct dpll_ctl_s {
-        uint16_t mode;
-        omap_clk dpll;
-    } dpll[3];
+    struct dpll_ctl_s *dpll[3];
 
     omap_clk clks;
-    struct {
-        int cold_start;
-        int clocking_scheme;
-        uint16_t arm_ckctl;
-        uint16_t arm_idlect1;
-        uint16_t arm_idlect2;
-        uint16_t arm_ewupct;
-        uint16_t arm_rstct1;
-        uint16_t arm_rstct2;
-        uint16_t arm_ckout1;
-        int dpll1_mode;
-        uint16_t dsp_idlect1;
-        uint16_t dsp_idlect2;
-        uint16_t dsp_rstct2;
-    } clkm;
+    struct omap_clkm_s *clkm;
 
     /* OMAP2-only peripherals */
     struct omap_l4_s *l4;
