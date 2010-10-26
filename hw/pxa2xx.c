@@ -409,7 +409,8 @@ static void pxa2xx_perf_write(void *opaque, int op2, int reg, int crm,
     }
 }
 
-static uint32_t pxa2xx_cp14_read(void *opaque, int op2, int reg, int crm)
+static uint32_t pxa2xx_cp14_read(void *opaque, int op2, int reg, int crm,
+                                 void *retaddr)
 {
     switch (crm) {
     case 0:
@@ -433,7 +434,7 @@ static uint32_t pxa2xx_cp14_read(void *opaque, int op2, int reg, int crm)
 }
 
 static void pxa2xx_cp14_write(void *opaque, int op2, int reg, int crm,
-                uint32_t value)
+                uint32_t value, void *retaddr)
 {
     switch (crm) {
     case 0:
