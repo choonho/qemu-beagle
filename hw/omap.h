@@ -849,6 +849,7 @@ struct omap_gp_timer_s;
 struct omap_gp_timer_s *omap_gp_timer_init(struct omap_target_agent_s *ta,
                 qemu_irq irq, omap_clk fclk, omap_clk iclk);
 void omap_gp_timer_reset(struct omap_gp_timer_s *s);
+void omap_gp_timer_change_clk(struct omap_gp_timer_s *timer);
 
 /* OMAP2 sysctimer */
 struct omap_synctimer_s;
