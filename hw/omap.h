@@ -1017,20 +1017,6 @@ void omap3_mmc_attach(DeviceState *dev, BlockDriverState *bs,
 DeviceState *omap_i2c_create(int mpu_model);
 i2c_bus *omap_i2c_bus(DeviceState *omap_i2c, int n);
 
-/* omap_usb.c */
-struct omap3_hsusb_s;
-struct omap3_hsusb_s *omap3_hsusb_init(struct omap_target_agent_s *otg_ta,
-                                       struct omap_target_agent_s *host_ta,
-                                       struct omap_target_agent_s *tll_ta,
-                                       qemu_irq mc_irq,
-                                       qemu_irq dma_irq,
-                                       qemu_irq ohci_irq,
-                                       qemu_irq ehci_irq,
-                                       qemu_irq tll_irq,
-                                       void (*otg_stdby_cb)(void *, int),
-                                       void *otg_stdby_opaque);
-void omap3_hsusb_reset(struct omap3_hsusb_s *s);
-
 # define cpu_is_omap310(cpu)		(cpu->mpu_model == omap310)
 # define cpu_is_omap1510(cpu)		(cpu->mpu_model == omap1510)
 # define cpu_is_omap1610(cpu)		(cpu->mpu_model == omap1610)
