@@ -552,6 +552,10 @@ struct soc_dma_s *omap_dma_init(target_phys_addr_t base, qemu_irq *irqs,
 struct soc_dma_s *omap_dma4_init(target_phys_addr_t base, qemu_irq *irqs,
                 struct omap_mpu_state_s *mpu, int fifo,
                 int chans, omap_clk iclk, omap_clk fclk);
+struct soc_dma_s *omap3_dma4_init(struct omap_target_agent_s *ta,
+                                  struct omap_mpu_state_s *mpu,
+                                  qemu_irq *irqs, int chans,
+                                  omap_clk iclk, omap_clk fclk);
 void omap_dma_reset(struct soc_dma_s *s);
 
 struct dma_irq_map {
