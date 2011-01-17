@@ -2208,8 +2208,6 @@ static void omap2_mpu_reset(void *opaque)
     omap_mmc_reset(mpu->mmc);
     omap_mcspi_reset(mpu->mcspi[0]);
     omap_mcspi_reset(mpu->mcspi[1]);
-    omap_i2c_reset(mpu->i2c[0]);
-    omap_i2c_reset(mpu->i2c[1]);
     cpu_reset(mpu->env);
 }
 
@@ -2370,16 +2368,16 @@ struct omap_mpu_state_s *omap2420_mpu_init(unsigned long sdram_size,
                                        omap_findclk(s, "clk32-kHz"),
                                        omap_findclk(s, "core_l4_iclk"));
 
-    s->i2c[0] = omap2_i2c_init(omap_l4tao(s->l4, 5),
-                    s->irq[0][OMAP_INT_24XX_I2C1_IRQ],
-                    &s->drq[OMAP24XX_DMA_I2C1_TX],
-                    omap_findclk(s, "i2c1.fclk"),
-                    omap_findclk(s, "i2c1.iclk"));
-    s->i2c[1] = omap2_i2c_init(omap_l4tao(s->l4, 6),
-                    s->irq[0][OMAP_INT_24XX_I2C2_IRQ],
-                    &s->drq[OMAP24XX_DMA_I2C2_TX],
-                    omap_findclk(s, "i2c2.fclk"),
-                    omap_findclk(s, "i2c2.iclk"));
+    s->i2c = omap_i2c_create(s->mpu_model);
+    busdev = sysbus_from_qdev(s->i2c);
+    sysbus_connect_irq(busdev, 0, s->irq[0][OMAP_INT_24XX_I2C1_IRQ]);
+    sysbus_connect_irq(busdev, 1, s->drq[OMAP24XX_DMA_I2C1_TX]);
+    sysbus_connect_irq(busdev, 2, s->drq[OMAP24XX_DMA_I2C1_RX]);
+    sysbus_connect_irq(busdev, 3, s->irq[0][OMAP_INT_24XX_I2C2_IRQ]);
+    sysbus_connect_irq(busdev, 4, s->drq[OMAP24XX_DMA_I2C2_TX]);
+    sysbus_connect_irq(busdev, 5, s->drq[OMAP24XX_DMA_I2C2_RX]);
+    sysbus_mmio_map(busdev, 0, omap_l4_region_base(omap_l4tao(s->l4, 5), 0));
+    sysbus_mmio_map(busdev, 1, omap_l4_region_base(omap_l4tao(s->l4, 6), 0));
 
     s->gpio = qdev_create(NULL, "omap2-gpio");
     qdev_prop_set_int32(s->gpio, "mpu_model", s->mpu_model);
