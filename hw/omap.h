@@ -109,7 +109,8 @@ struct omap_intr_handler_s;
 struct omap_intr_handler_s *omap_inth_init(target_phys_addr_t base,
                 unsigned long size, unsigned char nbanks, qemu_irq **pins,
                 qemu_irq parent_irq, qemu_irq parent_fiq, omap_clk clk);
-struct omap_intr_handler_s *omap2_inth_init(target_phys_addr_t base,
+struct omap_intr_handler_s *omap2_inth_init(struct omap_mpu_state_s *mpu,
+                                            target_phys_addr_t base,
                 int size, int nbanks, qemu_irq **pins,
                 qemu_irq parent_irq, qemu_irq parent_fiq,
                 omap_clk fclk, omap_clk iclk);

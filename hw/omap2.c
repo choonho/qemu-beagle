@@ -2263,7 +2263,7 @@ struct omap_mpu_state_s *omap2420_mpu_init(unsigned long sdram_size,
 
     /* Actually mapped at any 2K boundary in the ARM11 private-peripheral if */
     cpu_irq = arm_pic_init_cpu(s->env);
-    s->ih[0] = omap2_inth_init(0x480fe000, 0x1000, 3, &s->irq[0],
+    s->ih[0] = omap2_inth_init(s, 0x480fe000, 0x1000, 3, &s->irq[0],
                     cpu_irq[ARM_PIC_CPU_IRQ], cpu_irq[ARM_PIC_CPU_FIQ],
                     omap_findclk(s, "mpu_intc_fclk"),
                     omap_findclk(s, "mpu_intc_iclk"));
