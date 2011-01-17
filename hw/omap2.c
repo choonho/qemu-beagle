@@ -2381,7 +2381,7 @@ struct omap_mpu_state_s *omap2420_mpu_init(unsigned long sdram_size,
     gpio_clks[1] = omap_findclk(s, "gpio2_dbclk");
     gpio_clks[2] = omap_findclk(s, "gpio3_dbclk");
     gpio_clks[3] = omap_findclk(s, "gpio4_dbclk");
-    s->gpif = omap2_gpio_init(omap_l4ta(s->l4, 3),
+    s->gpif = omap2_gpio_init(s, omap_l4ta(s->l4, 3),
                     &s->irq[0][OMAP_INT_24XX_GPIO_BANK1],
                     gpio_clks, omap_findclk(s, "gpio_iclk"), 4);
 
