@@ -4573,6 +4573,10 @@ static int disas_neon_data_insn(CPUState * env, DisasContext *s, uint32_t insn)
                    VSHR, VSRA, VRSHR, VRSRA, VSRI, VSHL, VSLI, VQSHL, VQSHLU */
                 /* Right shifts are encoded as N - shift, where N is the
                    element size in bits.  */
+                if ((q && ((rd | rm) & 1))
+                    || (!u && (op == 4 || op == 6))) {
+                    return 1;
+                }
                 if (op <= 4) {
                     shift = shift - (1 << (size + 3));
                 }
@@ -4625,8 +4629,6 @@ static int disas_neon_data_insn(CPUState * env, DisasContext *s, uint32_t insn)
                             }
                             break;
                         case 4: /* VSRI */
-                            if (!u)
-                                return 1;
                             gen_helper_neon_shl_u64(cpu_V0, cpu_V0, cpu_V1);
                             break;
                         case 5: /* VSHL, VSLI */
@@ -4682,8 +4684,6 @@ static int disas_neon_data_insn(CPUState * env, DisasContext *s, uint32_t insn)
                             GEN_NEON_INTEGER_OP(rshl);
                             break;
                         case 4: /* VSRI */
-                            if (!u)
-                                return 1;
                             GEN_NEON_INTEGER_OP(shl);
                             break;
                         case 5: /* VSHL, VSLI */
