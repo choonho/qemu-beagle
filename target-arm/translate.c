@@ -80,6 +80,7 @@ static uint32_t gen_opc_condexec_bits[OPC_BUF_SIZE];
    conditional executions state has been updated.  */
 #define DISAS_WFI 4
 #define DISAS_SWI 5
+#define DISAS_SMC 6
 
 static TCGv_ptr cpu_env;
 /* We reuse the same 64-bit temporaries for efficiency.  */
@@ -766,6 +767,12 @@ static inline void store_reg_from_load(CPUState *env, DisasContext *s,
     } else {
         store_reg(s, reg, var);
     }
+}
+
+static inline void gen_smc(CPUState *env, DisasContext *s)
+{
+    tcg_gen_movi_i32(cpu_R[15], s->pc);
+    s->is_jmp = DISAS_SMC;
 }
 
 static inline TCGv gen_ld8s(TCGv addr, int index)
@@ -6516,8 +6523,13 @@ static void disas_arm_insn(CPUState * env, DisasContext *s)
         } else if ((insn & 0x0fe00000) == 0x0c400000) {
             /* Coprocessor double register transfer.  */
             ARCH(5TE);
+            /* XXX doesn't belong in the trustzone patch: should just UNDEF? */
+            cpu_abort(env, "unsupported coprocessor double register transfer\n");
         } else if ((insn & 0x0f000010) == 0x0e000010) {
             /* Additional coprocessor register transfer.  */
+            if (!disas_coproc_insn(env, s, insn)) {
+                return;
+            }
         } else if ((insn & 0x0ff10020) == 0x01000000) {
             uint32_t mask;
             uint32_t val;
@@ -6668,15 +6680,20 @@ static void disas_arm_insn(CPUState * env, DisasContext *s)
             store_reg(s, rd, tmp);
             break;
         case 7:
-            /* SMC instruction (op1 == 3)
-               and undefined instructions (op1 == 0 || op1 == 2)
-               will trap */
-            if (op1 != 1) {
+            if (op1 == 1) {
+                /* bkpt */
+                ARCH(5);
+                gen_exception_insn(s, 4, EXCP_BKPT);
+            } else if (op1 == 3) {
+                /* smi/smc */
+                if (!arm_feature(env, ARM_FEATURE_TRUSTZONE) ||
+                    !(env->cp15.c0_c2[4] & 0xf000) || IS_USER(s)) {
+                    goto illegal_op;
+                }
+                gen_smc(env, s);
+            } else {
                 goto illegal_op;
             }
-            /* bkpt */
-            ARCH(5);
-            gen_exception_insn(s, 4, EXCP_BKPT);
             break;
         case 0x8: /* signed multiply */
         case 0xa:
@@ -8287,8 +8304,11 @@ static int disas_thumb2_insn(CPUState *env, DisasContext *s, uint16_t insn_hw1)
                     goto illegal_op;
 
                 if (insn & (1 << 26)) {
-                    /* Secure monitor call (v6Z) */
-                    goto illegal_op; /* not implemented.  */
+                    /* Secure monitor call / smc (v6Z) */
+                    if (!(env->cp15.c0_c2[4] & 0xf000) || IS_USER(s)) {
+                        goto illegal_op;
+                    }
+                    gen_smc(env, s);
                 } else {
                     op = (insn >> 20) & 7;
                     switch (op) {
@@ -9587,6 +9607,8 @@ static inline void gen_intermediate_code_internal(CPUState *env,
             gen_set_condexec(dc);
             if (dc->is_jmp == DISAS_SWI) {
                 gen_exception(EXCP_SWI);
+            } else if (dc->is_jmp == DISAS_SMC) {
+                gen_exception(EXCP_SMC);
             } else {
                 gen_exception(EXCP_DEBUG);
             }
@@ -9599,6 +9621,8 @@ static inline void gen_intermediate_code_internal(CPUState *env,
         gen_set_condexec(dc);
         if (dc->is_jmp == DISAS_SWI && !dc->condjmp) {
             gen_exception(EXCP_SWI);
+        } else if (dc->is_jmp == DISAS_SMC && !dc->condjmp) {
+            gen_exception(EXCP_SMC);
         } else {
             /* FIXME: Single stepping a WFI insn will not halt
                the CPU.  */
@@ -9632,6 +9656,9 @@ static inline void gen_intermediate_code_internal(CPUState *env,
             break;
         case DISAS_SWI:
             gen_exception(EXCP_SWI);
+            break;
+        case DISAS_SMC:
+            gen_exception(EXCP_SMC);
             break;
         }
         if (dc->condjmp) {
