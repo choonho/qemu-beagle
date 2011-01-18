@@ -4202,6 +4202,7 @@ static int disas_neon_data_insn(CPUState * env, DisasContext *s, uint32_t insn)
             return 1;
         }
         }
+        pairwise = 0;
         switch (op) {
         case 8: /* VSHL */
         case 9: /* VQSHL */
@@ -4213,7 +4214,6 @@ static int disas_neon_data_insn(CPUState * env, DisasContext *s, uint32_t insn)
                 rtmp = rn;
                 rn = rm;
                 rm = rtmp;
-                pairwise = 0;
             }
             break;
         case 20: /* VPMAX */
@@ -4228,7 +4228,6 @@ static int disas_neon_data_insn(CPUState * env, DisasContext *s, uint32_t insn)
             pairwise = u;
             break;
         default:
-            pairwise = 0;
             break;
         }
 
