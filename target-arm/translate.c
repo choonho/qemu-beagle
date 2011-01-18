@@ -4881,6 +4881,10 @@ static int disas_neon_data_insn(CPUState * env, DisasContext *s, uint32_t insn)
                    VSHRN, VRSHRN, VQSHRN, VQSHRUN, VQRSHRN, VQRSHRUN */
                 int input_unsigned = (op == 8) ? !u : u;
 
+                if (rm & 1) {
+                    return 1;
+                }
+
                 shift = shift - (1 << (size + 3));
                 size++;
                 if (size == 3) {
