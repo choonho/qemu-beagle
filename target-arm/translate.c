@@ -4329,6 +4329,11 @@ static int disas_neon_data_insn(CPUState * env, DisasContext *s, uint32_t insn)
         case 21: /* VPMIN */
             pairwise = 1;
             break;
+        case 22: /* VQDMULH/VQRDMULH */
+            if (!size) {
+                return 1;
+            }
+            break;
         case 26: /* VADD/VSUB/VPADD/VABD (float) */
             pairwise = (u && size < 2);
             break;
@@ -4515,7 +4520,7 @@ static int disas_neon_data_insn(CPUState * env, DisasContext *s, uint32_t insn)
                         gen_helper_neon_qdmulh_s32(tmp, cpu_env, tmp, tmp2);
                         break;
                     default:
-                        return 1;
+                        abort(); /* size == 0,3 is handled earlier */
                     }
                 } else { /* VQRDHMUL */
                     switch (size) {
@@ -4526,7 +4531,7 @@ static int disas_neon_data_insn(CPUState * env, DisasContext *s, uint32_t insn)
                         gen_helper_neon_qrdmulh_s32(tmp, cpu_env, tmp, tmp2);
                         break;
                     default:
-                        return 1;
+                        abort(); /* size == 0,3 is handled earlier */
                     }
                 }
                 break;
