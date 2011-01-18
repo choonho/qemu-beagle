@@ -4225,78 +4225,78 @@ static int disas_neon_data_insn(CPUState * env, DisasContext *s, uint32_t insn)
         if (size == 3) {
             if (op == 1 || op == 5 || op == 8 || op == 9 || op == 10
                 || op == 11 || op == 16) {
-            /* 64-bit element instructions.  */
-            for (pass = 0; pass < (q ? 2 : 1); pass++) {
-                neon_load_reg64(cpu_V0, rn + pass);
-                neon_load_reg64(cpu_V1, rm + pass);
-                switch (op) {
-                case 1: /* VQADD */
-                    if (u) {
-                        gen_helper_neon_qadd_u64(cpu_V0, cpu_env,
-                                                 cpu_V0, cpu_V1);
-                    } else {
-                        gen_helper_neon_qadd_s64(cpu_V0, cpu_env,
-                                                 cpu_V0, cpu_V1);
+                /* 64-bit element instructions.  */
+                for (pass = 0; pass < (q ? 2 : 1); pass++) {
+                    neon_load_reg64(cpu_V0, rn + pass);
+                    neon_load_reg64(cpu_V1, rm + pass);
+                    switch (op) {
+                    case 1: /* VQADD */
+                        if (u) {
+                            gen_helper_neon_qadd_u64(cpu_V0, cpu_env,
+                                                     cpu_V0, cpu_V1);
+                        } else {
+                            gen_helper_neon_qadd_s64(cpu_V0, cpu_env,
+                                                     cpu_V0, cpu_V1);
+                        }
+                        break;
+                    case 5: /* VQSUB */
+                        if (u) {
+                            gen_helper_neon_qsub_u64(cpu_V0, cpu_env,
+                                                     cpu_V0, cpu_V1);
+                        } else {
+                            gen_helper_neon_qsub_s64(cpu_V0, cpu_env,
+                                                     cpu_V0, cpu_V1);
+                        }
+                        break;
+                    case 8: /* VSHL */
+                        if (u) {
+                            gen_helper_neon_shl_u64(cpu_V0, cpu_V1, cpu_V0);
+                        } else {
+                            gen_helper_neon_shl_s64(cpu_V0, cpu_V1, cpu_V0);
+                        }
+                        break;
+                    case 9: /* VQSHL */
+                        if (u) {
+                            gen_helper_neon_qshl_u64(cpu_V0, cpu_env,
+                                                     cpu_V1, cpu_V0);
+                        } else {
+                            gen_helper_neon_qshl_s64(cpu_V0, cpu_env,
+                                                     cpu_V1, cpu_V0);
+                        }
+                        break;
+                    case 10: /* VRSHL */
+                        if (u) {
+                            gen_helper_neon_rshl_u64(cpu_V0, cpu_V1, cpu_V0);
+                        } else {
+                            gen_helper_neon_rshl_s64(cpu_V0, cpu_V1, cpu_V0);
+                        }
+                        break;
+                    case 11: /* VQRSHL */
+                        if (u) {
+                            gen_helper_neon_qrshl_u64(cpu_V0, cpu_env,
+                                                      cpu_V1, cpu_V0);
+                        } else {
+                            gen_helper_neon_qrshl_s64(cpu_V0, cpu_env,
+                                                      cpu_V1, cpu_V0);
+                        }
+                        break;
+                    case 16:
+                        if (u) {
+                            tcg_gen_sub_i64(CPU_V001);
+                        } else {
+                            tcg_gen_add_i64(CPU_V001);
+                        }
+                        break;
+                    default:
+                        abort();
                     }
-                    break;
-                case 5: /* VQSUB */
-                    if (u) {
-                        gen_helper_neon_qsub_u64(cpu_V0, cpu_env,
-                                                 cpu_V0, cpu_V1);
-                    } else {
-                        gen_helper_neon_qsub_s64(cpu_V0, cpu_env,
-                                                 cpu_V0, cpu_V1);
-                    }
-                    break;
-                case 8: /* VSHL */
-                    if (u) {
-                        gen_helper_neon_shl_u64(cpu_V0, cpu_V1, cpu_V0);
-                    } else {
-                        gen_helper_neon_shl_s64(cpu_V0, cpu_V1, cpu_V0);
-                    }
-                    break;
-                case 9: /* VQSHL */
-                    if (u) {
-                        gen_helper_neon_qshl_u64(cpu_V0, cpu_env,
-                                                 cpu_V1, cpu_V0);
-                    } else {
-                        gen_helper_neon_qshl_s64(cpu_V0, cpu_env,
-                                                 cpu_V1, cpu_V0);
-                    }
-                    break;
-                case 10: /* VRSHL */
-                    if (u) {
-                        gen_helper_neon_rshl_u64(cpu_V0, cpu_V1, cpu_V0);
-                    } else {
-                        gen_helper_neon_rshl_s64(cpu_V0, cpu_V1, cpu_V0);
-                    }
-                    break;
-                case 11: /* VQRSHL */
-                    if (u) {
-                        gen_helper_neon_qrshl_u64(cpu_V0, cpu_env,
-                                                  cpu_V1, cpu_V0);
-                    } else {
-                        gen_helper_neon_qrshl_s64(cpu_V0, cpu_env,
-                                                  cpu_V1, cpu_V0);
-                    }
-                    break;
-                case 16:
-                    if (u) {
-                        tcg_gen_sub_i64(CPU_V001);
-                    } else {
-                        tcg_gen_add_i64(CPU_V001);
-                    }
-                    break;
-                default:
-                    abort();
+                    neon_store_reg64(cpu_V0, rd + pass);
                 }
-                neon_store_reg64(cpu_V0, rd + pass);
+                return 0;
             }
-            return 0;
-        }
-        if (op != 3) {
-            return 1;
-        }
+            if (op != 3) {
+                return 1;
+            }
         }
         switch (op) {
         case 8: /* VSHL */
