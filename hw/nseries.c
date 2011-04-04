@@ -137,7 +137,7 @@ static void n8x0_gpio_setup(struct n800_s *s)
     qemu_irq *mmc_cs = qemu_allocate_irqs(n800_mmc_cs_cb, s->cpu->mmc, 1);
     omap2_gpio_out_set(s->cpu->gpif, N8X0_MMC_CS_GPIO, mmc_cs[0]);
 
-    qemu_irq_lower(omap2_gpio_in_get(s->cpu->gpif, N800_BAT_COVER_GPIO)[0]);
+    qemu_irq_lower(omap2_gpio_in_get(s->cpu->gpif, N800_BAT_COVER_GPIO));
 }
 
 #define MAEMO_CAL_HEADER(...)				\
@@ -167,7 +167,7 @@ static void n8x0_nand_setup(struct n800_s *s)
 
     /* Either 0x40 or 0x48 are OK for the device ID */
     s->nand = onenand_init(NAND_MFR_SAMSUNG, 0x48, 0, 1,
-                           omap2_gpio_in_get(s->cpu->gpif,N8X0_ONENAND_GPIO)[0],
+                           omap2_gpio_in_get(s->cpu->gpif,N8X0_ONENAND_GPIO),
                            drive_get(IF_MTD, 0, 0));
     omap_gpmc_attach(s->cpu->gpmc, N8X0_ONENAND_CS, 0, onenand_base_update,
                      onenand_base_unmap, s->nand);
@@ -181,7 +181,7 @@ static void n8x0_nand_setup(struct n800_s *s)
 static void n8x0_i2c_setup(struct n800_s *s)
 {
     DeviceState *dev;
-    qemu_irq tmp_irq = omap2_gpio_in_get(s->cpu->gpif, N8X0_TMP105_GPIO)[0];
+    qemu_irq tmp_irq = omap2_gpio_in_get(s->cpu->gpif, N8X0_TMP105_GPIO);
 
     /* Attach the CPU on one end of our I2C bus.  */
     s->i2c = omap_i2c_bus(s->cpu->i2c[0]);
@@ -250,8 +250,8 @@ static void n800_tsc_kbd_setup(struct n800_s *s)
     /* XXX: are the three pins inverted inside the chip between the
      * tsc and the cpu (N4111)?  */
     qemu_irq penirq = NULL;	/* NC */
-    qemu_irq kbirq = omap2_gpio_in_get(s->cpu->gpif, N800_TSC_KP_IRQ_GPIO)[0];
-    qemu_irq dav = omap2_gpio_in_get(s->cpu->gpif, N800_TSC_TS_GPIO)[0];
+    qemu_irq kbirq = omap2_gpio_in_get(s->cpu->gpif, N800_TSC_KP_IRQ_GPIO);
+    qemu_irq dav = omap2_gpio_in_get(s->cpu->gpif, N800_TSC_TS_GPIO);
 
     s->ts.chip = tsc2301_init(penirq, kbirq, dav);
     s->ts.opaque = s->ts.chip->opaque;
@@ -270,7 +270,7 @@ static void n800_tsc_kbd_setup(struct n800_s *s)
 
 static void n810_tsc_setup(struct n800_s *s)
 {
-    qemu_irq pintdav = omap2_gpio_in_get(s->cpu->gpif, N810_TSC_TS_GPIO)[0];
+    qemu_irq pintdav = omap2_gpio_in_get(s->cpu->gpif, N810_TSC_TS_GPIO);
 
     s->ts.opaque = tsc2005_init(pintdav);
     s->ts.txrx = tsc2005_txrx;
@@ -362,7 +362,7 @@ static int n810_keys[0x80] = {
 
 static void n810_kbd_setup(struct n800_s *s)
 {
-    qemu_irq kbd_irq = omap2_gpio_in_get(s->cpu->gpif, N810_KEYBOARD_GPIO)[0];
+    qemu_irq kbd_irq = omap2_gpio_in_get(s->cpu->gpif, N810_KEYBOARD_GPIO);
     DeviceState *dev;
     int i;
 
@@ -727,9 +727,9 @@ static void n8x0_dss_setup(struct n800_s *s)
 
 static void n8x0_cbus_setup(struct n800_s *s)
 {
-    qemu_irq dat_out = omap2_gpio_in_get(s->cpu->gpif, N8X0_CBUS_DAT_GPIO)[0];
-    qemu_irq retu_irq = omap2_gpio_in_get(s->cpu->gpif, N8X0_RETU_GPIO)[0];
-    qemu_irq tahvo_irq = omap2_gpio_in_get(s->cpu->gpif, N8X0_TAHVO_GPIO)[0];
+    qemu_irq dat_out = omap2_gpio_in_get(s->cpu->gpif, N8X0_CBUS_DAT_GPIO);
+    qemu_irq retu_irq = omap2_gpio_in_get(s->cpu->gpif, N8X0_RETU_GPIO);
+    qemu_irq tahvo_irq = omap2_gpio_in_get(s->cpu->gpif, N8X0_TAHVO_GPIO);
 
     CBus *cbus = cbus_init(dat_out);
 
@@ -745,7 +745,7 @@ static void n8x0_uart_setup(struct n800_s *s)
 {
     CharDriverState *radio = uart_hci_init(
                     omap2_gpio_in_get(s->cpu->gpif,
-                            N8X0_BT_HOST_WKUP_GPIO)[0]);
+                            N8X0_BT_HOST_WKUP_GPIO));
 
     omap2_gpio_out_set(s->cpu->gpif, N8X0_BT_RESET_GPIO,
                     csrhci_pins_get(radio)[csrhci_pin_reset]);
@@ -764,7 +764,7 @@ static void n8x0_usb_power_cb(void *opaque, int line, int level)
 
 static void n8x0_usb_setup(struct n800_s *s)
 {
-    qemu_irq tusb_irq = omap2_gpio_in_get(s->cpu->gpif, N8X0_TUSB_INT_GPIO)[0];
+    qemu_irq tusb_irq = omap2_gpio_in_get(s->cpu->gpif, N8X0_TUSB_INT_GPIO);
     qemu_irq tusb_pwr = qemu_allocate_irqs(n8x0_usb_power_cb, s, 1)[0];
     TUSBState *tusb = tusb6010_init(tusb_irq);
 
@@ -1021,7 +1021,7 @@ static void n8x0_boot_init(void *opaque)
 
     /* If the machine has a slided keyboard, open it */
     if (s->kbd)
-        qemu_irq_raise(omap2_gpio_in_get(s->cpu->gpif, N810_SLIDE_GPIO)[0]);
+        qemu_irq_raise(omap2_gpio_in_get(s->cpu->gpif, N810_SLIDE_GPIO));
 }
 
 #define OMAP_TAG_NOKIA_BT	0x4e01
