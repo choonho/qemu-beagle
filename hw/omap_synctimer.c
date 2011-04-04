@@ -18,7 +18,6 @@
  * with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 #include "hw.h"
-#include "qemu-timer.h"
 #include "omap.h"
 
 /* 32-kHz Sync Timer of the OMAP2 */
