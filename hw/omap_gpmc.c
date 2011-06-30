@@ -696,7 +696,7 @@ static void omap_gpmc_write32(void *opaque, target_phys_addr_t addr,
     case 0x200 ... 0x220:	/* GPMC_ECC_RESULT */
     case 0x234:	/* GPMC_PSA_LSB */
     case 0x238:	/* GPMC_PSA_MSB */
-        OMAP_RO_REG(addr);
+        OMAP_RO_REGV(addr, value);
         break;
 
     case 0x010:	/* GPMC_SYSCONFIG */
@@ -875,7 +875,7 @@ static void omap_gpmc_write32(void *opaque, target_phys_addr_t addr,
 
     default:
     bad_reg:
-        OMAP_BAD_REG(addr);
+        OMAP_BAD_REGV(addr, value);
         return;
     }
 }
@@ -930,7 +930,7 @@ static void omap_gpmc_write8(void *opaque, target_phys_addr_t addr,
         break;
     default:
     bad_reg:
-        OMAP_BAD_REG(addr);
+        OMAP_BAD_REGV(addr, value);
         return;
     }
 }
@@ -994,7 +994,7 @@ static void omap_gpmc_write16(void *opaque, target_phys_addr_t addr,
         break;
     default:
     bad_reg:
-        OMAP_BAD_REG(addr);
+        OMAP_BAD_REGV(addr, value);
         return;
     }
 }
