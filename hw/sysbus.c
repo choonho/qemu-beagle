@@ -91,6 +91,25 @@ void sysbus_mmio_map(SysBusDevice *dev, int n, target_phys_addr_t addr)
     }
 }
 
+void sysbus_mmio_resize(SysBusDevice *dev, int n, target_phys_addr_t newsize)
+{
+    target_phys_addr_t addr;
+    assert(n >= 0 && n < dev->num_mmio);
+    if (newsize != dev->mmio[n].size) {
+        addr = dev->mmio[n].addr;
+        if (addr != (target_phys_addr_t)-1) {
+            /* The expected use case is that resizes will only happen
+             * on unmapped regions, but we handle the already-mapped
+             * case by temporarily unmapping and remapping.
+             */
+            sysbus_mmio_unmap(dev, n);
+        }
+        dev->mmio[n].size = newsize;
+        if (addr != (target_phys_addr_t)-1) {
+            sysbus_mmio_map(dev, n, addr);
+        }
+    }
+}
 
 /* Request an IRQ source.  The actual IRQ object may be populated later.  */
 void sysbus_init_irq(SysBusDevice *dev, qemu_irq *p)
