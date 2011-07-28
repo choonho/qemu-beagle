@@ -40,6 +40,26 @@ void sysbus_connect_irq(SysBusDevice *dev, int n, qemu_irq irq)
     }
 }
 
+void sysbus_mmio_unmap(SysBusDevice *dev, int n)
+{
+    assert(n >= 0 && n < dev->num_mmio);
+
+    if (dev->mmio[n].addr == (target_phys_addr_t)-1) {
+        /* region already unmapped */
+        return;
+    }
+    if (dev->mmio[n].memory) {
+        memory_region_del_subregion(get_system_memory(),
+                                    dev->mmio[n].memory);
+    } else if (dev->mmio[n].cb) {
+        dev->mmio[n].cb(dev, (target_phys_addr_t)-1);
+    } else {
+        cpu_register_physical_memory(dev->mmio[n].addr, dev->mmio[n].size,
+                                     IO_MEM_UNASSIGNED);
+    }
+    dev->mmio[n].addr = (target_phys_addr_t)-1;
+}
+
 void sysbus_mmio_map(SysBusDevice *dev, int n, target_phys_addr_t addr)
 {
     assert(n >= 0 && n < dev->num_mmio);
