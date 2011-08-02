@@ -986,6 +986,10 @@ struct omap_i2c_s *omap_i2c_init(target_phys_addr_t base,
                 qemu_irq irq, qemu_irq *dma, omap_clk clk);
 struct omap_i2c_s *omap2_i2c_init(struct omap_target_agent_s *ta,
                 qemu_irq irq, qemu_irq *dma, omap_clk fclk, omap_clk iclk);
+struct omap_i2c_s *omap3_i2c_init(struct omap_target_agent_s *ta,
+                                  qemu_irq irq, qemu_irq *dma,
+                                  omap_clk fclk, omap_clk iclk,
+                                  int fifosize);
 void omap_i2c_reset(struct omap_i2c_s *s);
 i2c_bus *omap_i2c_bus(struct omap_i2c_s *s);
 
