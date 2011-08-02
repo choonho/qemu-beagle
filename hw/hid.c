@@ -359,7 +359,6 @@ void hid_reset(HIDState *hs)
 {
     switch (hs->kind) {
     case HID_KEYBOARD:
-        qemu_add_kbd_event_handler(hid_keyboard_event, hs);
         memset(hs->kbd.keycodes, 0, sizeof(hs->kbd.keycodes));
         memset(hs->kbd.key, 0, sizeof(hs->kbd.key));
         hs->kbd.keys = 0;
@@ -399,5 +398,7 @@ void hid_init(HIDState *hs, int kind, HIDEventFunc event)
     } else if (hs->kind == HID_TABLET) {
         hs->ptr.eh_entry = qemu_add_mouse_event_handler(hid_pointer_event, hs,
                                                         1, "QEMU HID Tablet");
+    } else if (hs->kind == HID_KEYBOARD) {
+        qemu_add_kbd_event_handler(hid_keyboard_event, hs);
     }
 }
