@@ -35,6 +35,11 @@ static inline bool serial_isa_init(int index, CharDriverState *chr)
     return true;
 }
 
+SerialState *serial_mm_init_nomap(int it_shift, int baudbase,
+                                  CharDriverState *chr, int be,
+                                  qemu_irq **irq,
+                                  CPUReadMemoryFunc *const **read,
+                                  CPUWriteMemoryFunc *const **write);
 void serial_set_frequency(SerialState *s, uint32_t frequency);
 
 /* parallel.c */
