@@ -193,11 +193,16 @@ static CPUWriteMemoryFunc *omap_nand_writefn[] = {
     omap_nand_write32,
 };
 
-static void omap_gpmc_cs_map(struct omap_gpmc_cs_file_s *f)
+static void omap_gpmc_cs_map(struct omap_gpmc_s *s, int cs)
 {
+    struct omap_gpmc_cs_file_s *f = &s->cs_file[cs];
     uint32_t mask = (f->config[6] >> 8) & 0xf;
     uint32_t base = f->config[6] & 0x3f;
     uint32_t size;
+    if (!(f->config[6] & (1 << 6))) {
+        /* Do nothing unless CSVALID */
+        return;
+    }
     /* TODO: check for overlapping regions and report access errors */
     if ((mask != 0x8 && mask != 0xc && mask != 0xe && mask != 0xf) ||
         (base & 0x0f & ~mask)) {
@@ -226,8 +231,14 @@ static void omap_gpmc_cs_map(struct omap_gpmc_cs_file_s *f)
     }
 }
 
-static void omap_gpmc_cs_unmap(struct omap_gpmc_cs_file_s *f)
+static void omap_gpmc_cs_unmap(struct omap_gpmc_s *s, int cs)
 {
+    struct omap_gpmc_cs_file_s *f = &s->cs_file[cs];
+    if (!(f->config[6] & (1 << 6))) {
+        /* Do nothing unless CSVALID */
+        return;
+    }
+
     switch (omap_gpmc_devtype(f)) {
     case OMAP_GPMC_NOR:
         if (f->dev && f->mmio_index >= 0) {
@@ -263,8 +274,7 @@ void omap_gpmc_reset(struct omap_gpmc_s *s)
     s->preffifo = 0;
     s->prefcount = 0;
     for (i = 0; i < 8; i ++) {
-        if (s->cs_file[i].config[6] & (1 << 6))			/* CSVALID */
-            omap_gpmc_cs_unmap(s->cs_file + i);
+        omap_gpmc_cs_unmap(s, i);
         s->cs_file[i].config[1] = 0x101001;
         s->cs_file[i].config[2] = 0x020201;
         s->cs_file[i].config[3] = 0x10031003;
@@ -277,7 +287,7 @@ void omap_gpmc_reset(struct omap_gpmc_s *s)
         if (i == 0) {
             s->cs_file[i].config[0] &= 0x00433e00;
             s->cs_file[i].config[6] |= 1 << 6; /* CSVALID */
-            omap_gpmc_cs_map(&s->cs_file[i]);
+            omap_gpmc_cs_map(s, i);
         } else {
             /* FIXME: again, this should force device size to 16bit but
              * here instead we keep what omap_gpmc_attach has done */
@@ -522,12 +532,10 @@ static void omap_gpmc_write32(void *opaque, target_phys_addr_t addr,
             break;
         case 0x78:      /* GPMC_CONFIG7 */
             if ((f->config[6] ^ value) & 0xf7f) {
-                if (f->config[6] & (1 << 6))            /* CSVALID */
-                    omap_gpmc_cs_unmap(f);
-                if (value & (1 << 6))                   /* CSVALID */
-                    omap_gpmc_cs_map(f);
+                omap_gpmc_cs_unmap(s, cs);
+                f->config[6] = value & 0x00000f7f;
+                omap_gpmc_cs_map(s, cs);
             }
-            f->config[6] = value & 0x00000f7f;
             break;
         case 0x7c:      /* GPMC_NAND_COMMAND */
         case 0x80:      /* GPMC_NAND_ADDRESS */
@@ -785,9 +793,7 @@ void omap_gpmc_attach(struct omap_gpmc_s *s, int cs, DeviceState *dev,
     f = &s->cs_file[cs];
     if (dev != f->dev || mmio_index != f->mmio_index ||
         devicetype != omap_gpmc_devtype(f)) {
-        if (f->config[6] & (1 << 6)) { /* CSVALID */
-            omap_gpmc_cs_unmap(f);
-        }
+        omap_gpmc_cs_unmap(s, cs);
         f->dev = dev;
         f->mmio_index = mmio_index;
         f->config[0] &= ~(0x3 << 10);
@@ -798,8 +804,6 @@ void omap_gpmc_attach(struct omap_gpmc_s *s, int cs, DeviceState *dev,
                 f->config[0] |= OMAP_GPMC_16BIT << 12;
             }
         }
-        if (f->config[6] & (1 << 6)) { /* CSVALID */
-            omap_gpmc_cs_map(f);
-        }
+        omap_gpmc_cs_map(s, cs);
     }
 }
