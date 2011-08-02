@@ -72,16 +72,24 @@ void omap_clk_reparent(omap_clk clk, omap_clk parent);
 
 /* OMAP2 l4 Interconnect */
 struct omap_l4_s;
-struct omap_l4_region_s {
-    target_phys_addr_t offset;
-    size_t size;
-    int access;
-};
-struct omap_l4_agent_info_s {
+struct omap_l4_region_s;
+typedef enum {
+    L4TYPE_GENERIC = 0, /* not mapped by default, must be mapped separately */
+    L4TYPE_IA,          /* initiator agent */
+    L4TYPE_TA,          /* target agent */
+    L4TYPE_LA,          /* link register agent */
+    L4TYPE_AP           /* address protection */
+} omap3_l4_region_type_t;
+struct omap2_l4_agent_info_s {
     int ta;
     int region;
     int regions;
     int ta_region;
+};
+struct omap3_l4_agent_info_s {
+    int agent_id;
+    int first_region_id;
+    int region_count;
 };
 struct omap_target_agent_s {
     struct omap_l4_s *bus;
@@ -92,18 +100,28 @@ struct omap_target_agent_s {
     uint32_t control;
     uint32_t status;
 };
-struct omap_l4_s *omap_l4_init(target_phys_addr_t base, int ta_num);
-
-struct omap_target_agent_s;
-struct omap_target_agent_s *omap_l4ta_get(
+struct omap_l4_region_s {
+    target_phys_addr_t offset;
+    size_t size;
+    int access; /* omap3_l4_region_type_t for OMAP3 */
+};
+struct omap_l4_s *omap_l4_init(target_phys_addr_t base, int ta_num,
+                               int region_count);
+struct omap_target_agent_s *omap2_l4ta_init(
     struct omap_l4_s *bus,
     const struct omap_l4_region_s *regions,
-    const struct omap_l4_agent_info_s *agents,
+    const struct omap2_l4_agent_info_s *agents,
+    int cs);
+struct omap_target_agent_s *omap3_l4ta_init(
+    struct omap_l4_s *bus,
+    const struct omap_l4_region_s *regions,
+    const struct omap3_l4_agent_info_s *agents,
     int cs);
 target_phys_addr_t omap_l4_attach(struct omap_target_agent_s *ta, int region,
-                int iotype);
+                                  int iotype);
 target_phys_addr_t omap_l4_region_base(struct omap_target_agent_s *ta,
                                        int region);
+uint32_t omap_l4_size(struct omap_target_agent_s *ta, int region);
 int l4_register_io_memory(CPUReadMemoryFunc * const *mem_read,
                 CPUWriteMemoryFunc * const *mem_write, void *opaque);
 
