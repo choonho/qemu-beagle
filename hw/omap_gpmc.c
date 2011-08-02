@@ -48,6 +48,14 @@ struct omap_gpmc_s {
     ECCState ecc[9];
 };
 
+#define OMAP_GPMC_8BIT 0
+#define OMAP_GPMC_16BIT 1
+
+static int omap_gpmc_devtype(struct omap_gpmc_cs_file_s *f)
+{
+    return (f->config[0] >> 10) & 3;
+}
+
 static void omap_gpmc_int_update(struct omap_gpmc_s *s)
 {
     qemu_set_irq(s->irq, s->irqen & s->irqst);
@@ -396,7 +404,7 @@ struct omap_gpmc_s *omap_gpmc_init(struct omap_mpu_state_s *mpu,
 }
 
 void omap_gpmc_attach(struct omap_gpmc_s *s, int cs, DeviceState *dev,
-                      int mmio_index)
+                      int mmio_index, int devicetype)
 {
     struct omap_gpmc_cs_file_s *f;
 
@@ -405,13 +413,21 @@ void omap_gpmc_attach(struct omap_gpmc_s *s, int cs, DeviceState *dev,
         exit(-1);
     }
     f = &s->cs_file[cs];
-    if (dev != f->dev || mmio_index != f->mmio_index) {
+    if (dev != f->dev || mmio_index != f->mmio_index ||
+        devicetype != omap_gpmc_devtype(f)) {
         if (f->config[6] & (1 << 6)) { /* CSVALID */
             omap_gpmc_cs_unmap(f);
         }
         f->dev = dev;
         f->mmio_index = mmio_index;
         f->config[0] &= ~(0x3 << 10);
+        f->config[0] |= (devicetype & 3) << 10;
+        f->config[0] &= ~(0x3 << 12);
+        if (omap_gpmc_devtype(f) == OMAP_GPMC_NAND) {
+            if (nand_getbuswidth(f->dev) == 16) {
+                f->config[0] |= OMAP_GPMC_16BIT << 12;
+            }
+        }
         if (f->config[6] & (1 << 6)) { /* CSVALID */
             omap_gpmc_cs_map(f);
         }
