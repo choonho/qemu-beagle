@@ -172,10 +172,13 @@ struct omap_uart_s *omap2_uart_init(struct omap_target_agent_s *ta,
     return s;
 }
 
-void omap_uart_attach(struct omap_uart_s *s, CharDriverState *chr)
+void omap_uart_attach(struct omap_uart_s *s, CharDriverState *chr,
+                      const char *label)
 {
     /* TODO: Should reuse or destroy current s->serial */
+    fprintf(stderr, "%s: WARNING - this function is broken, avoid using it\n",
+            __FUNCTION__);
     s->serial = serial_mm_init(s->base, 2, s->irq,
                                omap_clk_getrate(s->fclk) / 16,
-                               chr ?: qemu_chr_new("null", "null", NULL), 1, 0);
+                               chr ?: qemu_chr_new(label, "null", NULL), 1, 0);
 }
