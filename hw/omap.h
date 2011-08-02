@@ -1006,6 +1006,7 @@ struct omap_i2c_s *omap_i2c_init(target_phys_addr_t base,
 struct omap_i2c_s *omap2_i2c_init(struct omap_target_agent_s *ta,
                 qemu_irq irq, qemu_irq *dma, omap_clk fclk, omap_clk iclk);
 struct omap_i2c_s *omap3_i2c_init(struct omap_target_agent_s *ta,
+                                  struct omap_mpu_state_s *mpu,
                                   qemu_irq irq, qemu_irq *dma,
                                   omap_clk fclk, omap_clk iclk,
                                   int fifosize);
