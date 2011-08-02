@@ -21,6 +21,7 @@
 #include "hw.h"
 #include "flash.h"
 #include "omap.h"
+#include "sysbus.h"
 
 /* General-Purpose Memory Controller */
 struct omap_gpmc_s {
@@ -37,12 +38,8 @@ struct omap_gpmc_s {
     int prefcount;
     struct omap_gpmc_cs_file_s {
         uint32_t config[7];
-        target_phys_addr_t base;
-        size_t size;
-        int iomemtype;
-        void (*base_update)(void *opaque, target_phys_addr_t new);
-        void (*unmap)(void *opaque);
-        void *opaque;
+        DeviceState *dev;
+        int mmio_index;
     } cs_file[8];
     int ecc_cs;
     int ecc_ptr;
@@ -55,42 +52,35 @@ static void omap_gpmc_int_update(struct omap_gpmc_s *s)
     qemu_set_irq(s->irq, s->irqen & s->irqst);
 }
 
-static void omap_gpmc_cs_map(struct omap_gpmc_cs_file_s *f, int base, int mask)
+static void omap_gpmc_cs_map(struct omap_gpmc_cs_file_s *f)
 {
+    uint32_t mask = (f->config[6] >> 8) & 0xf;
+    uint32_t base = f->config[6] & 0x3f;
     /* TODO: check for overlapping regions and report access errors */
     if ((mask != 0x8 && mask != 0xc && mask != 0xe && mask != 0xf) ||
-                    (base < 0 || base >= 0x40) ||
-                    (base & 0x0f & ~mask)) {
+        (base & 0x0f & ~mask)) {
         fprintf(stderr, "%s: wrong cs address mapping/decoding!\n",
                         __FUNCTION__);
         return;
     }
-
-    if (!f->opaque)
-        return;
-
-    f->base = base << 24;
-    f->size = (0x0fffffff & ~(mask << 24)) + 1;
-    /* TODO: rather than setting the size of the mapping (which should be
-     * constant), the mask should cause wrapping of the address space, so
-     * that the same memory becomes accessible at every <i>size</i> bytes
-     * starting from <i>base</i>.  */
-    if (f->iomemtype)
-        cpu_register_physical_memory(f->base, f->size, f->iomemtype);
-
-    if (f->base_update)
-        f->base_update(f->opaque, f->base);
+    if (((f->config[0] >> 10) & 3) == 0) { /* DEVICETYPE == NOR */
+        base <<= 24;
+        uint32_t size = (0x0fffffff & ~(mask << 24)) + 1;
+        /* TODO: rather than setting the size of the mapping (which should be
+         * constant), the mask should cause wrapping of the address space, so
+         * that the same memory becomes accessible at every <i>size</i> bytes
+         * starting from <i>base</i>.  */
+        if (f->dev && f->mmio_index >= 0) {
+            sysbus_mmio_resize(sysbus_from_qdev(f->dev), f->mmio_index, size);
+            sysbus_mmio_map(sysbus_from_qdev(f->dev), f->mmio_index, base);
+        }
+    }
 }
 
 static void omap_gpmc_cs_unmap(struct omap_gpmc_cs_file_s *f)
 {
-    if (f->size) {
-        if (f->unmap)
-            f->unmap(f->opaque);
-        if (f->iomemtype)
-            cpu_register_physical_memory(f->base, f->size, IO_MEM_UNASSIGNED);
-        f->base = 0;
-        f->size = 0;
+    if (f->dev && f->mmio_index >= 0) {
+        sysbus_mmio_unmap(sysbus_from_qdev(f->dev), f->mmio_index);
     }
 }
 
@@ -112,19 +102,25 @@ void omap_gpmc_reset(struct omap_gpmc_s *s)
     for (i = 0; i < 8; i ++) {
         if (s->cs_file[i].config[6] & (1 << 6))			/* CSVALID */
             omap_gpmc_cs_unmap(s->cs_file + i);
-        s->cs_file[i].config[0] = i ? 1 << 12 : 0;
         s->cs_file[i].config[1] = 0x101001;
         s->cs_file[i].config[2] = 0x020201;
         s->cs_file[i].config[3] = 0x10031003;
         s->cs_file[i].config[4] = 0x10f1111;
         s->cs_file[i].config[5] = 0;
-        s->cs_file[i].config[6] = 0xf00 | (i ? 0 : 1 << 6);
-        if (s->cs_file[i].config[6] & (1 << 6))			/* CSVALID */
-            omap_gpmc_cs_map(&s->cs_file[i],
-                            s->cs_file[i].config[6] & 0x1f,	/* MASKADDR */
-                        (s->cs_file[i].config[6] >> 8 & 0xf));	/* BASEADDR */
+        s->cs_file[i].config[6] = 0xf00;
+        /* FIXME: attached devices should be probed for some of the CFG1 bits
+         * for now we just keep those bits intact over resets as they are set
+         * initially with omap_gpmc_attach function */
+        if (i == 0) {
+            s->cs_file[i].config[0] &= 0x00433e00;
+            s->cs_file[i].config[6] |= 1 << 6; /* CSVALID */
+            omap_gpmc_cs_map(&s->cs_file[i]);
+        } else {
+            /* FIXME: again, this should force device size to 16bit but
+             * here instead we keep what omap_gpmc_attach has done */
+            s->cs_file[i].config[0] &= 0x00403c00;
+        }
     }
-    omap_gpmc_cs_map(s->cs_file, 0, 0xf);
     s->ecc_cs = 0;
     s->ecc_ptr = 0;
     s->ecc_cfg = 0x3fcff000;
@@ -306,8 +302,7 @@ static void omap_gpmc_write(void *opaque, target_phys_addr_t addr,
                     if (f->config[6] & (1 << 6))		/* CSVALID */
                         omap_gpmc_cs_unmap(f);
                     if (value & (1 << 6))			/* CSVALID */
-                        omap_gpmc_cs_map(f, value & 0x1f,	/* MASKADDR */
-                                        (value >> 8 & 0xf));	/* BASEADDR */
+                        omap_gpmc_cs_map(f);
                 }
                 f->config[6] = value & 0x00000f7f;
                 break;
@@ -396,9 +391,8 @@ struct omap_gpmc_s *omap_gpmc_init(target_phys_addr_t base, qemu_irq irq)
     return s;
 }
 
-void omap_gpmc_attach(struct omap_gpmc_s *s, int cs, int iomemtype,
-                void (*base_upd)(void *opaque, target_phys_addr_t new),
-                void (*unmap)(void *opaque), void *opaque)
+void omap_gpmc_attach(struct omap_gpmc_s *s, int cs, DeviceState *dev,
+                      int mmio_index)
 {
     struct omap_gpmc_cs_file_s *f;
 
@@ -407,13 +401,15 @@ void omap_gpmc_attach(struct omap_gpmc_s *s, int cs, int iomemtype,
         exit(-1);
     }
     f = &s->cs_file[cs];
-
-    f->iomemtype = iomemtype;
-    f->base_update = base_upd;
-    f->unmap = unmap;
-    f->opaque = opaque;
-
-    if (f->config[6] & (1 << 6))				/* CSVALID */
-        omap_gpmc_cs_map(f, f->config[6] & 0x1f,		/* MASKADDR */
-                        (f->config[6] >> 8 & 0xf));		/* BASEADDR */
+    if (dev != f->dev || mmio_index != f->mmio_index) {
+        if (f->config[6] & (1 << 6)) { /* CSVALID */
+            omap_gpmc_cs_unmap(f);
+        }
+        f->dev = dev;
+        f->mmio_index = mmio_index;
+        f->config[0] &= ~(0x3 << 10);
+        if (f->config[6] & (1 << 6)) { /* CSVALID */
+            omap_gpmc_cs_map(f);
+        }
+    }
 }
