@@ -175,11 +175,12 @@ struct omap_uart_s *omap2_uart_init(struct omap_target_agent_s *ta,
     return s;
 }
 
-void omap_uart_attach(struct omap_uart_s *s, CharDriverState *chr)
+void omap_uart_attach(struct omap_uart_s *s, CharDriverState *chr,
+                      const char *label)
 {
     /* TODO: Should reuse or destroy current s->serial */
     s->serial = serial_mm_init(get_system_memory(), s->base, 2, s->irq,
                                omap_clk_getrate(s->fclk) / 16,
-                               chr ?: qemu_chr_new("null", "null", NULL),
+                               chr ?: qemu_chr_new(label, "null", NULL),
                                DEVICE_NATIVE_ENDIAN);
 }
