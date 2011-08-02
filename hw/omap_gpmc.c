@@ -26,6 +26,7 @@
 /* General-Purpose Memory Controller */
 struct omap_gpmc_s {
     qemu_irq irq;
+    int accept_256;
 
     uint8_t revision;
     uint8_t sysconfig;
@@ -204,11 +205,10 @@ static void omap_gpmc_cs_map(struct omap_gpmc_s *s, int cs)
         return;
     }
     /* TODO: check for overlapping regions and report access errors */
-    if ((mask != 0x8 && mask != 0xc && mask != 0xe && mask != 0xf) ||
-        (base & 0x0f & ~mask)) {
-        fprintf(stderr, "%s: wrong cs address mapping/decoding!\n",
-                        __FUNCTION__);
-        return;
+    if (mask != 0x8 && mask != 0xc && mask != 0xe && mask != 0xf
+         && !(s->accept_256 && !mask)) {
+        fprintf(stderr, "%s: invalid chip-select mask address (0x%x)\n",
+                 __func__, mask);
     }
     base <<= 24;
     size = (0x0fffffff & ~(mask << 24)) + 1;
@@ -763,6 +763,7 @@ struct omap_gpmc_s *omap_gpmc_init(struct omap_mpu_state_s *mpu,
             qemu_mallocz(sizeof(struct omap_gpmc_s));
 
     s->irq = irq;
+    s->accept_256 = cpu_is_omap3630(mpu);
     s->revision = cpu_class_omap3(mpu) ? 0x50 : 0x20;
     omap_gpmc_reset(s);
 
