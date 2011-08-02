@@ -68,7 +68,7 @@ static void beagle_common_init(ram_addr_t ram_size,
 #if MAX_SERIAL_PORTS < 1
 #error MAX_SERIAL_PORTS must be at least 1!
 #endif
-    s->cpu = omap3_mpu_init(cpu_model, ram_size,
+    s->cpu = omap3_mpu_init(cpu_model, 1, ram_size,
                             NULL, NULL, serial_hds[0], NULL);
 
     s->nand = nand_init(dmtd ? dmtd->bdrv : NULL, NAND_MFR_MICRON, 0xba);
@@ -110,8 +110,6 @@ static void beagle_common_init(ram_addr_t ram_size,
     s->ddc = i2c_create_slave(omap_i2c_bus(s->cpu->i2c, 2), "i2c-ddc", 0x50);
 
     omap_lcd_panel_attach(s->cpu->dss);
-
-    omap3_boot_rom_emu(s->cpu);
 }
 
 static void beagle_xm_init(ram_addr_t ram_size,
