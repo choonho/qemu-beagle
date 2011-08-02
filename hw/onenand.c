@@ -103,7 +103,7 @@ enum {
     ONEN_LOCK_UNLOCKED = 1 << 2,
 };
 
-static void onenand_base_updatefn(SysBusDevice *dev, target_phys_addr_t new)
+static void onenand_base_update(SysBusDevice *dev, target_phys_addr_t new)
 {
     OneNANDState *s = (OneNANDState *)dev;
     if (s->base != new) {
@@ -130,18 +130,6 @@ static void onenand_base_updatefn(SysBusDevice *dev, target_phys_addr_t new)
         }
         s->base = new;
     }
-}
-
-/* This wrapper can go away as soon as omap_gpmc is qdevified */
-void onenand_base_update(void *opaque, target_phys_addr_t new)
-{
-    onenand_base_updatefn(opaque, new);
-}
-
-/* Also only needed for pre-qdev omap_gpmc */
-void onenand_base_unmap(void *opaque)
-{
-    sysbus_mmio_unmap(sysbus_from_qdev((DeviceState *)opaque), 0);
 }
 
 static void onenand_intr_update(OneNANDState *s)
@@ -810,7 +798,7 @@ static int onenand_initfn(SysBusDevice *dev)
     s->data[1][0] = ram + ((0x0200 + (1 << (PAGE_SHIFT - 1))) << s->shift);
     s->data[1][1] = ram + ((0x8010 + (1 << (PAGE_SHIFT - 6))) << s->shift);
     sysbus_init_irq(dev, &s->intr);
-    sysbus_init_mmio_cb(dev, 0x10000 << s->shift, onenand_base_updatefn);
+    sysbus_init_mmio_cb(dev, 0x10000 << s->shift, onenand_base_update);
     vmstate_register(&dev->qdev,
                      ((s->shift & 0x7f) << 24)
                      | ((s->id.man & 0xff) << 16)
