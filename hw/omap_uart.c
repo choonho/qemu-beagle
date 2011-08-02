@@ -49,7 +49,13 @@ struct omap_uart_s {
     qemu_irq tx_drq;
     qemu_irq rx_drq;
 
-    uint8_t lcr_cache;
+    /* Register access mode, which affects what registers you see */
+    enum {
+        regs_operational,
+        regs_config_a,
+        regs_config_b
+    } access_mode;
+
     uint8_t eblr;
     uint8_t syscontrol;
     uint8_t wkup;
@@ -67,6 +73,14 @@ struct omap_uart_s {
     uint8_t xon[2], xoff[2];
 };
 
+static int tcr_tlr_mode(struct omap_uart_s *s)
+{
+    /* Return true if registers 0x18 and 0x1c are TCR/TLR
+     * (as opposed to SPR/MSR/XOFF)
+     */
+    return (s->efr & 0x10) && (s->mcr_cache & 0x40);
+}
+
 static void omap_uart_reset(DeviceState *qdev)
 {
     struct omap_uart_s *s = FROM_SYSBUS(struct omap_uart_s,
@@ -78,7 +92,7 @@ static void omap_uart_reset(DeviceState *qdev)
     s->clksel = 0;
     s->blr = 0x40;
     s->acreg = 0;
-    s->lcr_cache = 0;
+    s->access_mode = regs_operational;
 
     s->mcr_cache = 0;
     s->tcr = 0x0f;
@@ -100,13 +114,13 @@ static uint64_t omap_uart_read(void *opaque, target_phys_addr_t addr,
     case 0x0c:
         return s->serial_ops->read(s->serial, addr, size);
     case 0x08:
-        if (s->lcr_cache == 0xbf) {
+        if (s->access_mode == regs_config_b) {
             return s->efr;
         }
         return s->serial_ops->read(s->serial, addr, size);
     case 0x10:
     case 0x14:
-        if (s->lcr_cache == 0xbf) {
+        if (s->access_mode == regs_config_b) {
             return s->xon[(addr & 7) >> 2];
         } else if (addr == 0x10) {
             return s->serial_ops->read(s->serial, addr, size)
@@ -115,10 +129,10 @@ static uint64_t omap_uart_read(void *opaque, target_phys_addr_t addr,
         return s->serial_ops->read(s->serial, addr, size);
     case 0x18:
     case 0x1c:
-        if ((s->efr & 0x10) && (s->mcr_cache & 0x40)) {
+        if (tcr_tlr_mode(s)) {
             return (addr == 0x18) ? s->tcr : s->tlr;
         }
-        if (s->lcr_cache == 0xbf) {
+        if (s->access_mode == regs_config_b) {
             return s->xoff[(addr & 7) >> 2];
         }
         return s->serial_ops->read(s->serial, addr, size);
@@ -135,12 +149,12 @@ static uint64_t omap_uart_read(void *opaque, target_phys_addr_t addr,
     case 0x34: /* SFREGH */
         return 0;
     case 0x38: /* UASR/BLR */
-        if ((s->lcr_cache & 0x80)) {
+        if (s->access_mode != regs_operational) {
             return 0; /* FIXME: return correct autodetect value */
         }
         return s->blr;
     case 0x3c: /* ACREG */
-        return (s->lcr_cache & 0x80) ? 0 : s->acreg;
+        return (s->access_mode != regs_operational) ? 0 : s->acreg;
     case 0x40:	/* SCR */
         return s->scr;
     case 0x44:	/* SSR */
@@ -177,19 +191,25 @@ static void omap_uart_write(void *opaque, target_phys_addr_t addr,
         s->serial_ops->write(s->serial, addr, value, size);
         break;
     case 0x08:
-        if (s->lcr_cache == 0xbf) {
+        if (s->access_mode == regs_config_b) {
             s->efr = value;
         } else {
             s->serial_ops->write(s->serial, addr, value, size);
         }
         break;
     case 0x0c:
-        s->lcr_cache = value;
+        if ((value & 0xff) == 0xbf) {
+            s->access_mode = regs_config_b;
+        } else if (value & 0x80) {
+            s->access_mode = regs_config_a;
+        } else {
+            s->access_mode = regs_operational;
+        }
         s->serial_ops->write(s->serial, addr, value, size);
         break;
     case 0x10:
     case 0x14:
-        if (s->lcr_cache == 0xbf) {
+        if (s->access_mode == regs_config_b) {
             s->xon[(addr & 7) >> 2] = value;
         } else {
             if (addr == 0x10) {
@@ -200,13 +220,13 @@ static void omap_uart_write(void *opaque, target_phys_addr_t addr,
         break;
     case 0x18:
     case 0x1c:
-        if ((s->efr & 0x10) && (s->mcr_cache & 0x40)) {
+        if (tcr_tlr_mode(s)) {
             if (addr == 0x18) {
                 s->tcr = value & 0xff;
             } else {
                 s->tlr = value & 0xff;
             }
-        } else if (s->lcr_cache == 0xbf) {
+        } else if (s->access_mode == regs_config_b) {
             s->xoff[(addr & 7) >> 2] = value;
         } else {
             s->serial_ops->write(s->serial, addr, value, size);
@@ -225,12 +245,12 @@ static void omap_uart_write(void *opaque, target_phys_addr_t addr,
         /* ignored */
         break;
     case 0x38: /* BLR */
-        if (!(s->lcr_cache & 0x80)) {
+        if (s->access_mode == regs_operational) {
             s->blr = value & 0xc0;
         }
         break;
     case 0x3c: /* ACREG */
-        if (!(s->lcr_cache & 0x80)) {
+        if (s->access_mode == regs_operational) {
             s->acreg = value & 0xff;
         }
         break;
