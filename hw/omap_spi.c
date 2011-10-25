@@ -179,50 +179,50 @@ static void omap_mcspi_transfer_run(OMAPSPIBusState *s, int chnum)
 
     if (!(s->control & 1) ||        /* SINGLE */
         (ch->config & (1 << 20))) { /* FORCE */
-            wl = 1 + (0x1f & (ch->config >> 7)); /* WL */
-            if (!IS_OMAP3_SPI(s) || s->fifo_ch != chnum ||
-                !((ch->config >> 27) & 3)) {     /* FFER | FFEW */
+        wl = 1 + (0x1f & (ch->config >> 7)); /* WL */
+        if (!IS_OMAP3_SPI(s) || s->fifo_ch != chnum ||
+            !((ch->config >> 27) & 3)) {     /* FFER | FFEW */
+            ch->rx = spi_txrx(s->bus, chnum, ch->tx, wl);
+        } else {
+            switch ((ch->config >> 27) & 3) {
+            case 1: /* !FFER, FFEW */
+                if (trm != 1)
+                    ch->tx = omap_mcspi_fifo_get(&s->tx_fifo, wl);
                 ch->rx = spi_txrx(s->bus, chnum, ch->tx, wl);
-            } else {
-                switch ((ch->config >> 27) & 3) {
-                case 1: /* !FFER, FFEW */
+                s->fifo_wcnt--;
+                break;
+            case 2: /* FFER, !FFEW */
+                ch->rx = spi_txrx(s->bus, chnum, ch->tx, wl);
+                if (trm != 2)
+                    omap_mcspi_fifo_put(&s->rx_fifo, wl, ch->rx);
+                s->fifo_wcnt--;
+                break;
+            case 3: /* FFER, FFEW */
+                while (s->rx_fifo.len < s->rx_fifo.size &&
+                       s->tx_fifo.len && s->fifo_wcnt) {
                     if (trm != 1)
                         ch->tx = omap_mcspi_fifo_get(&s->tx_fifo, wl);
-                    ch->rx = spi_txrx(s->bus, chnum, ch->tx, wl);
-                    s->fifo_wcnt--;
-                    break;
-                case 2: /* FFER, !FFEW */
                     ch->rx = spi_txrx(s->bus, chnum, ch->tx, wl);
                     if (trm != 2)
                         omap_mcspi_fifo_put(&s->rx_fifo, wl, ch->rx);
                     s->fifo_wcnt--;
-                    break;
-                case 3: /* FFER, FFEW */
-                    while (s->rx_fifo.len < s->rx_fifo.size &&
-                           s->tx_fifo.len && s->fifo_wcnt) {
-                        if (trm != 1)
-                            ch->tx = omap_mcspi_fifo_get(&s->tx_fifo, wl);
-                        ch->rx = spi_txrx(s->bus, chnum, ch->tx, wl);
-                        if (trm != 2)
-                            omap_mcspi_fifo_put(&s->rx_fifo, wl, ch->rx);
-                        s->fifo_wcnt--;
-                    }
-                    break;
-                default:
-                    break;
                 }
-                if ((ch->config & (1 << 28)) &&        /* FFER */
-                    s->rx_fifo.len >= s->rx_fifo.size)
-                    ch->status |= 1 << 6;              /* RXFFF */
-                ch->status &= ~(1 << 5);               /* RXFFE */
-                ch->status &= ~(1 << 4);               /* TXFFF */
-                if ((ch->config & (1 << 27)) &&        /* FFEW */
-                    !s->tx_fifo.len)
-                    ch->status |= 1 << 3;              /* TXFFE */
-                if (!s->fifo_wcnt &&
-                    ((s->xferlevel >> 16) & 0xffff))   /* WCNT */
-                    s->irqst |= 1 << 17;               /* EOW */
+                break;
+            default:
+                break;
             }
+            if ((ch->config & (1 << 28)) &&        /* FFER */
+                s->rx_fifo.len >= s->rx_fifo.size)
+                ch->status |= 1 << 6;              /* RXFFF */
+            ch->status &= ~(1 << 5);               /* RXFFE */
+            ch->status &= ~(1 << 4);               /* TXFFF */
+            if ((ch->config & (1 << 27)) &&        /* FFEW */
+                !s->tx_fifo.len)
+                ch->status |= 1 << 3;              /* TXFFE */
+            if (!s->fifo_wcnt &&
+                ((s->xferlevel >> 16) & 0xffff))   /* WCNT */
+                s->irqst |= 1 << 17;               /* EOW */
+        }
     }
 
     ch->tx = 0;
