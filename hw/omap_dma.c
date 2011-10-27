@@ -247,7 +247,7 @@ static void omap_dma_deactivate_channel(struct omap_dma_s *s,
 
     /* Don't deactive the channel if it is synchronized and the DMA request is
        active */
-    if (ch->sync && ch->enable && (s->dma->drqbmp & (1 << ch->sync)))
+    if (ch->sync && ch->enable && s->dma->drqst[ch->sync])
         return;
 
     if (ch->active) {
@@ -265,9 +265,9 @@ static void omap_dma_enable_channel(struct omap_dma_s *s,
         ch->waiting_end_prog = 0;
         omap_dma_channel_load(ch);
         /* TODO: theoretically if ch->sync && ch->prefetch &&
-         * !s->dma->drqbmp[ch->sync], we should also activate and fetch
+         * !s->dma->drqst[ch->sync], we should also activate and fetch
          * from source and then stall until signalled.  */
-        if ((!ch->sync) || (s->dma->drqbmp & (1 << ch->sync)))
+        if ((!ch->sync) || s->dma->drqst[ch->sync])
             omap_dma_activate_channel(s, ch);
     }
 }
@@ -1547,12 +1547,12 @@ static void omap_dma_request(void *opaque, int drq, int req)
     struct omap_dma_s *s = (struct omap_dma_s *) opaque;
     /* The request pins are level triggered in QEMU.  */
     if (req) {
-        if (~s->dma->drqbmp & (1 << drq)) {
-            s->dma->drqbmp |= 1 << drq;
+        if (!s->dma->drqst[drq]) {
+            s->dma->drqst[drq] = 1;
             omap_dma_process_request(s, drq);
         }
     } else
-        s->dma->drqbmp &= ~(1 << drq);
+        s->dma->drqst[drq] = 0;
 }
 
 /* XXX: this won't be needed once soc_dma knows about clocks.  */
