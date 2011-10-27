@@ -1144,9 +1144,9 @@ struct omap_mpu_state_s *omap2420_mpu_init(unsigned long sdram_size,
                 const char *core);
 
 # if TARGET_PHYS_ADDR_BITS == 32
-#  define OMAP_FMT_plx "%#08x"
+#  define OMAP_FMT_plx "0x%08x"
 # elif TARGET_PHYS_ADDR_BITS == 64
-#  define OMAP_FMT_plx "%#08" PRIx64
+#  define OMAP_FMT_plx "0x%08" PRIx64
 # else
 #  error TARGET_PHYS_ADDR_BITS undefined
 # endif
