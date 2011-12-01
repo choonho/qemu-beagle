@@ -28,7 +28,8 @@ struct omap_l4_s {
 };
 
 struct omap_l4_s *omap_l4_init(MemoryRegion *address_space,
-                               target_phys_addr_t base, int ta_num)
+                               target_phys_addr_t base, int ta_num,
+                               int region_count)
 {
     struct omap_l4_s *bus = g_malloc0(
                     sizeof(*bus) + ta_num * sizeof(*bus->ta));
@@ -108,14 +109,14 @@ static const MemoryRegionOps omap_l4ta_ops = {
     .endianness = DEVICE_NATIVE_ENDIAN,
 };
 
-struct omap_target_agent_s *omap_l4ta_get(struct omap_l4_s *bus,
+struct omap_target_agent_s *omap2_l4ta_init(struct omap_l4_s *bus,
         const struct omap_l4_region_s *regions,
-	const struct omap_l4_agent_info_s *agents,
+        const struct omap2_l4_agent_info_s *agents,
 	int cs)
 {
     int i;
     struct omap_target_agent_s *ta = NULL;
-    const struct omap_l4_agent_info_s *info = NULL;
+    const struct omap2_l4_agent_info_s *info = NULL;
 
     for (i = 0; i < bus->ta_num; i ++)
         if (agents[i].ta == cs) {
@@ -159,4 +160,49 @@ target_phys_addr_t omap_l4_attach(struct omap_target_agent_s *ta,
     }
 
     return base;
+}
+
+struct omap_target_agent_s *omap3_l4ta_init(
+    struct omap_l4_s *bus,
+    const struct omap_l4_region_s *regions,
+    const struct omap3_l4_agent_info_s *agents,
+    int cs)
+{
+    int i;
+    struct omap_target_agent_s *ta = NULL;
+    const struct omap3_l4_agent_info_s *info = NULL;
+
+    for (i = 0; i < bus->ta_num; i++)
+        if (agents[i].agent_id == cs) {
+            ta = &bus->ta[i];
+            info = &agents[i];
+            break;
+        }
+    if (!ta) {
+        hw_error("%s: invalid agent id (%i)", __func__, cs);
+    }
+    if (ta->bus) {
+        hw_error("%s: target agent (%d) already initialized", __func__, cs);
+    }
+
+    ta->bus = bus;
+    ta->start = &regions[info->first_region_id];
+    ta->regions = info->region_count;
+
+    ta->component = ('Q' << 24) | ('E' << 16) | ('M' << 8) | ('U' << 0);
+    ta->status = 0x00000000;
+    ta->control = 0x00000200;
+
+    for (i = 0; i < info->region_count; i++) {
+        if (regions[info->first_region_id + i].access == L4TYPE_TA) {
+            break;
+        }
+    }
+    if (i >= info->region_count) {
+        hw_error("%s: specified agent (%d) has no TA region", __func__, cs);
+    }
+
+    ta->base = ta->bus->base + ta->start[i].offset;
+
+    return ta;
 }
