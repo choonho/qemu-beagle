@@ -2455,12 +2455,12 @@ struct omap_mpu_state_s *omap2420_mpu_init(MemoryRegion *sysmem,
                     &s->drq[OMAP24XX_DMA_MMC1_TX],
                     omap_findclk(s, "mmc_fclk"), omap_findclk(s, "mmc_iclk"));
 
-    s->mcspi[0] = omap_mcspi_init(omap_l4ta(s->l4, 35), 4,
+    s->mcspi[0] = omap_mcspi_init(omap_l4ta(s->l4, 35), s, 4,
                     qdev_get_gpio_in(s->ih[0], OMAP_INT_24XX_MCSPI1_IRQ),
                     &s->drq[OMAP24XX_DMA_SPI1_TX0],
                     omap_findclk(s, "spi1_fclk"),
                     omap_findclk(s, "spi1_iclk"));
-    s->mcspi[1] = omap_mcspi_init(omap_l4ta(s->l4, 36), 2,
+    s->mcspi[1] = omap_mcspi_init(omap_l4ta(s->l4, 36), s, 2,
                     qdev_get_gpio_in(s->ih[0], OMAP_INT_24XX_MCSPI2_IRQ),
                     &s->drq[OMAP24XX_DMA_SPI2_TX0],
                     omap_findclk(s, "spi2_fclk"),
