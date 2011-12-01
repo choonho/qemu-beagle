@@ -959,6 +959,10 @@ void omap_mmc_reset(struct omap_mmc_s *s);
 void omap_mmc_handlers(struct omap_mmc_s *s, qemu_irq ro, qemu_irq cover);
 void omap_mmc_enable(struct omap_mmc_s *s, int enable);
 
+/* omap3_mmc.c */
+void omap3_mmc_attach(DeviceState *dev, BlockDriverState *bs,
+                      int is_spi, int is_mmc);
+
 /* omap_i2c.c */
 i2c_bus *omap_i2c_bus(DeviceState *omap_i2c, int n);
 
