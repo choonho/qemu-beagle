@@ -163,8 +163,8 @@ static void omap_i2c_fifo_run(OMAPI2CBusState *s)
         }
         if (!s->count_cur) {
             TRACE("no more data to transmit/receive");
+            i2c_end_transfer(s->bus);
             if ((s->control >> 1) & 1) {   /* STP */
-                i2c_end_transfer(s->bus);
                 s->control &= ~0x0602;     /* MST | TRX | STP */
                 s->count_cur = s->count;
             } 
