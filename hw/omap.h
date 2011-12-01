@@ -35,6 +35,12 @@
 # define OMAP2_L3_BASE		0x68000000
 # define OMAP2_Q2_BASE		0x80000000
 # define OMAP2_Q3_BASE		0xc0000000
+# define OMAP3_Q1_BASE      0x40000000
+# define OMAP3_L4_BASE      0x48000000
+# define OMAP3_SRAM_BASE    0x40200000
+# define OMAP3_L3_BASE      0x68000000
+# define OMAP3_Q2_BASE      0x80000000
+# define OMAP3_Q3_BASE      0xc0000000
 # define OMAP_MPUI_BASE		0xe1000000
 
 # define OMAP730_SRAM_SIZE	0x00032000
@@ -43,6 +49,8 @@
 # define OMAP1611_SRAM_SIZE	0x0003e800
 # define OMAP242X_SRAM_SIZE	0x000a0000
 # define OMAP243X_SRAM_SIZE	0x00010000
+# define OMAP3XXX_SRAM_SIZE     0x00010000
+# define OMAP3XXX_BOOTROM_SIZE  0x00008000
 # define OMAP_CS0_SIZE		0x04000000
 # define OMAP_CS1_SIZE		0x04000000
 # define OMAP_CS2_SIZE		0x04000000
@@ -421,6 +429,106 @@ void omap_gpmc_attach_nand(struct omap_gpmc_s *s, int cs, DeviceState *nand);
 # define OMAP_INT_243X_CARKIT		94
 # define OMAP_INT_34XX_GPTIMER12	95
 
+/*
+ * OMAP-3XXX common IRQ numbers
+ */
+#define OMAP_INT_3XXX_EMUINT        0  /* MPU emulation */
+#define OMAP_INT_3XXX_COMMTX        1  /* MPU emulation */
+#define OMAP_INT_3XXX_COMMRX        2  /* MPU emulation */
+#define OMAP_INT_3XXX_BENCH         3  /* MPU emulation */
+#define OMAP_INT_3XXX_MCBSP2_ST_IRQ 4  /* Sidetone MCBSP2 overflow */
+#define OMAP_INT_3XXX_MCBSP3_ST_IRQ 5  /* Sidetone MCBSP3 overflow */
+#define OMAP_INT_3XXX_SSM_ABORT_IRQ 6
+#define OMAP_INT_3XXX_SYS_NIRQ      7  /* External source (active low) */
+#define OMAP_INT_3XXX_D2D_FW_IRQ    8
+#define OMAP_INT_3XXX_SMX_DBG_IRQ   9  /* L3 interconnect error for debug */
+#define OMAP_INT_3XXX_SMX_APP_IRQ   10 /* L3 interconnect error for application */
+#define OMAP_INT_3XXX_PRCM_MPU_IRQ  11 /* PRCM module IRQ */
+#define OMAP_INT_3XXX_SDMA_IRQ0     12 /* System DMA request 0 */ 
+#define OMAP_INT_3XXX_SDMA_IRQ1     13 /* System DMA request 1 */
+#define OMAP_INT_3XXX_SDMA_IRQ2     14 /* System DMA request 2 */
+#define OMAP_INT_3XXX_SDMA_IRQ3     15 /* System DMA request 3 */
+#define OMAP_INT_3XXX_MCBSP1_IRQ    16 /* MCBSP module 1 IRQ */
+#define OMAP_INT_3XXX_MCBSP2_IRQ    17 /* MCBSP module 2 IRQ */
+#define OMAP_INT_3XXX_SR1_IRQ       18 /* SmartReflex 1 */
+#define OMAP_INT_3XXX_SR2_IRQ       19 /* SmartReflex 2 */
+#define OMAP_INT_3XXX_GPMC_IRQ      20 /* General-purpose memory controller module */ 
+#define OMAP_INT_3XXX_SGX_IRQ       21 /* 2D/3D graphics module */
+#define OMAP_INT_3XXX_MCBSP3_IRQ    22 /* MCBSP module 3 */
+#define OMAP_INT_3XXX_MCBSP4_IRQ    23 /* MCBSP module 4 */
+#define OMAP_INT_3XXX_CAM_IRQ0      24 /* Camera interface request 0 */
+#define OMAP_INT_3XXX_DSS_IRQ       25 /* Display subsystem module */
+#define OMAP_INT_3XXX_MAIL_U0_MPU   26 /* Mailbox user 0 request */
+#define OMAP_INT_3XXX_MCBSP5_IRQ    27 /* MCBSP module 5 */
+#define OMAP_INT_3XXX_IVA2_MMU_IRQ  28 /* IVA2 MMU */
+#define OMAP_INT_3XXX_GPIO1_MPU_IRQ 29 /* GPIO module 1 */
+#define OMAP_INT_3XXX_GPIO2_MPU_IRQ 30 /* GPIO module 2 */
+#define OMAP_INT_3XXX_GPIO3_MPU_IRQ 31 /* GPIO module 3 */
+#define OMAP_INT_3XXX_GPIO4_MPU_IRQ 32 /* GPIO module 4 */
+#define OMAP_INT_3XXX_GPIO5_MPU_IRQ 33 /* GPIO module 5 */
+#define OMAP_INT_3XXX_GPIO6_MPU_IRQ 34 /* GPIO module 6 */
+#define OMAP_INT_3XXX_USIM_IRQ      35
+#define OMAP_INT_3XXX_WDT3_IRQ      36 /* Watchdog timer module 3 overflow */
+#define OMAP_INT_3XXX_GPT1_IRQ      37 /* General-purpose timer module 1 */
+#define OMAP_INT_3XXX_GPT2_IRQ      38 /* General-purpose timer module 2 */
+#define OMAP_INT_3XXX_GPT3_IRQ      39 /* General-purpose timer module 3 */
+#define OMAP_INT_3XXX_GPT4_IRQ      40 /* General-purpose timer module 4 */
+#define OMAP_INT_3XXX_GPT5_IRQ      41 /* General-purpose timer module 5 */
+#define OMAP_INT_3XXX_GPT6_IRQ      42 /* General-purpose timer module 6 */
+#define OMAP_INT_3XXX_GPT7_IRQ      43 /* General-purpose timer module 7 */
+#define OMAP_INT_3XXX_GPT8_IRQ      44 /* General-purpose timer module 8 */
+#define OMAP_INT_3XXX_GPT9_IRQ      45 /* General-purpose timer module 9 */
+#define OMAP_INT_3XXX_GPT10_IRQ     46 /* General-purpose timer module 10 */
+#define OMAP_INT_3XXX_GPT11_IRQ     47 /* General-purpose timer module 11 */
+#define OMAP_INT_3XXX_MCSPI4_IRQ    48 /* MCSPI module 4 */
+#define OMAP_INT_3XXX_SHA1MD52_IRQ  49
+#define OMAP_INT_3XXX_FPKA_READY    50
+#define OMAP_INT_3XXX_SHA1MD51_IRQ  51
+#define OMAP_INT_3XXX_RNG_IRQ       52
+#define OMAP_INT_3XXX_MG_IRQ        53
+#define OMAP_INT_3XXX_MCBSP4_IRQ_TX 54 /* MCBSP module 4 transmit */
+#define OMAP_INT_3XXX_MCBSP4_IRQ_RX 55 /* MCBSP module 4 receive */
+#define OMAP_INT_3XXX_I2C1_IRQ      56 /* I2C module 1 */
+#define OMAP_INT_3XXX_I2C2_IRQ      57 /* I2C module 2 */
+#define OMAP_INT_3XXX_HDQ_IRQ       58 /* HDQ/1-Wire */
+#define OMAP_INT_3XXX_MCBSP1_IRQ_TX 59 /* MCBSP module 1 transmit */
+#define OMAP_INT_3XXX_MCBSP1_IRQ_RX 60 /* MCBSP module 1 receive */
+#define OMAP_INT_3XXX_I2C3_IRQ      61 /* I2C module 3 */
+#define OMAP_INT_3XXX_MCBSP2_IRQ_TX 62 /* MCBSP module 2 transmit */
+#define OMAP_INT_3XXX_MCBSP2_IRQ_RX 63 /* MCBSP module 2 receive */
+#define OMAP_INT_3XXX_FPKA_ERROR    64
+#define OMAP_INT_3XXX_MCSPI1_IRQ    65 /* MCSPI module 1 */
+#define OMAP_INT_3XXX_MCSPI2_IRQ    66 /* MCSPI module 2 */
+/* IRQ67 is reserved */
+/* IRQ68 is reserved */
+/* IRQ69 is reserved */
+/* IRQ70 is reserved */
+/* IRQ71 is reserved */
+#define OMAP_INT_3XXX_UART1_IRQ     72 /* UART module 1 */
+#define OMAP_INT_3XXX_UART2_IRQ     73 /* UART module 2 */
+#define OMAP_INT_3XXX_UART3_IRQ     74 /* UART module 3 (also infrared)*/
+#define OMAP_INT_3XXX_PBIAS_IRQ     75 /* Merged interrupt for PBIASlite1 and 2 */
+#define OMAP_INT_3XXX_OHCI_IRQ      76 /* OHCI controller HSUSB MP Host interrupt */
+#define OMAP_INT_3XXX_EHCI_IRQ      77 /* EHCI controller HSUSB MP Host interrupt */
+#define OMAP_INT_3XXX_TLL_IRQ       78 /* HSUSB MP TLL interrupt */
+/* IRQ79 is reserved */
+#define OMAP_INT_3XXX_UART4_IRQ     80 /* UART module 4 (OMAP3630 only) */
+#define OMAP_INT_3XXX_MCBSP5_IRQ_TX 81 /* MCBSP module 5 transmit */
+#define OMAP_INT_3XXX_MCBSP5_IRQ_RX 82 /* MCBSP module 5 receive */
+#define OMAP_INT_3XXX_MMC1_IRQ      83 /* MMC/SD module 1 */
+#define OMAP_INT_3XXX_MS_IRQ		84
+/* IRQ85 is reserved */
+#define OMAP_INT_3XXX_MMC2_IRQ		86 /* MMC/SD module 2 */
+#define OMAP_INT_3XXX_MPU_ICR_IRQ   87 /* MPU ICR */
+#define OMAP_INT_3XXX_D2DFRINT      88 /* 3G coprocessor */
+#define OMAP_INT_3XXX_MCBSP3_IRQ_TX 89 /* MCBSP module 3 transmit */
+#define OMAP_INT_3XXX_MCBSP3_IRQ_RX 90 /* MCBSP module 3 receive */
+#define OMAP_INT_3XXX_MCSPI3_IRQ    91 /* MCSPI module 3 */
+#define OMAP_INT_3XXX_HSUSB_MC      92 /* High-Speed USB OTG controller */
+#define OMAP_INT_3XXX_HSUSB_DMA     93 /* High-Speed USB OTG DMA controller */
+#define OMAP_INT_3XXX_MMC3_IRQ      94 /* MMC/SD module 3 */
+#define OMAP_INT_3XXX_GPT12_IRQ     95 /* General-purpose timer module 12 */
+
 /* omap_dma.c */
 enum omap_dma_model {
     omap_dma_3_0,
@@ -639,6 +747,86 @@ struct omap_dma_lcd_channel_s {
 # define OMAP24XX_DMA_MMC1_RX		62
 # define OMAP24XX_DMA_MS		63	/* Not in OMAP2420 */
 # define OMAP24XX_DMA_EXT_DMAREQ5	64
+
+/*
+ * DMA request numbers for the OMAP3
+ * Note that the numbers have to match the values that are
+ * written to CCRi SYNCHRO_CONTROL bits, i.e. actual line
+ * number plus one! Zero is a reserved value (defined as
+ * NO_DEVICE here). Other missing values are reserved.
+ */
+#define OMAP3XXX_DMA_NO_DEVICE        0
+
+#define OMAP3XXX_DMA_EXT_DMAREQ0      2
+#define OMAP3XXX_DMA_EXT_DMAREQ1      3
+#define OMAP3XXX_DMA_GPMC             4
+
+#define OMAP3XXX_DMA_DSS_LINETRIGGER  6
+#define OMAP3XXX_DMA_EXT_DMAREQ2      7
+
+#define OMAP3XXX_DMA_SPI3_TX0         15
+#define OMAP3XXX_DMA_SPI3_RX0         16
+#define OMAP3XXX_DMA_MCBSP3_TX        17
+#define OMAP3XXX_DMA_MCBSP3_RX        18
+#define OMAP3XXX_DMA_MCBSP4_TX        19
+#define OMAP3XXX_DMA_MCBSP4_RX        20
+#define OMAP3XXX_DMA_MCBSP5_TX        21
+#define OMAP3XXX_DMA_MCBSP5_RX        22
+#define OMAP3XXX_DMA_SPI3_TX1         23
+#define OMAP3XXX_DMA_SPI3_RX1         24
+#define OMAP3XXX_DMA_I2C3_TX          25
+#define OMAP3XXX_DMA_I2C3_RX          26
+#define OMAP3XXX_DMA_I2C1_TX          27
+#define OMAP3XXX_DMA_I2C1_RX          28
+#define OMAP3XXX_DMA_I2C2_TX          29
+#define OMAP3XXX_DMA_I2C2_RX          30
+#define OMAP3XXX_DMA_MCBSP1_TX        31
+#define OMAP3XXX_DMA_MCBSP1_RX        32
+#define OMAP3XXX_DMA_MCBSP2_TX        33
+#define OMAP3XXX_DMA_MCBSP2_RX        34
+#define OMAP3XXX_DMA_SPI1_TX0         35
+#define OMAP3XXX_DMA_SPI1_RX0         36
+#define OMAP3XXX_DMA_SPI1_TX1         37
+#define OMAP3XXX_DMA_SPI1_RX1         38
+#define OMAP3XXX_DMA_SPI1_TX2         39
+#define OMAP3XXX_DMA_SPI1_RX2         40
+#define OMAP3XXX_DMA_SPI1_TX3         41
+#define OMAP3XXX_DMA_SPI1_RX3         42
+#define OMAP3XXX_DMA_SPI2_TX0         43
+#define OMAP3XXX_DMA_SPI2_RX0         44
+#define OMAP3XXX_DMA_SPI2_TX1         45
+#define OMAP3XXX_DMA_SPI2_RX1         46
+#define OMAP3XXX_DMA_MMC2_TX          47
+#define OMAP3XXX_DMA_MMC2_RX          48
+#define OMAP3XXX_DMA_UART1_TX         49
+#define OMAP3XXX_DMA_UART1_RX         50
+#define OMAP3XXX_DMA_UART2_TX         51
+#define OMAP3XXX_DMA_UART2_RX         52
+#define OMAP3XXX_DMA_UART3_TX         53
+#define OMAP3XXX_DMA_UART3_RX         54
+
+#define OMAP3XXX_DMA_MMC1_TX          61
+#define OMAP3XXX_DMA_MMC1_RX          62
+#define OMAP3XXX_DMA_MS               63
+#define OMAP3XXX_DMA_EXT_DMAREQ3      64
+#define OMAP3XXX_DMA_AES2_TX          65
+#define OMAP3XXX_DMA_AES2_RX          66
+#define OMAP3XXX_DMA_DES2_TX          67
+#define OMAP3XXX_DMA_DES2_RX          68
+#define OMAP3XXX_DMA_SHA1MD5_RX       69
+#define OMAP3XXX_DMA_SPI4_TX0         70
+#define OMAP3XXX_DMA_SPI4_RX0         71
+#define OMAP3XXX_DMA_DSS0             72
+#define OMAP3XXX_DMA_DSS1             73
+#define OMAP3XXX_DMA_DSS2             74
+#define OMAP3XXX_DMA_DSS3             75
+
+#define OMAP3XXX_DMA_MMC3_TX          77
+#define OMAP3XXX_DMA_MMC3_RX          78
+#define OMAP3XXX_DMA_USIM_TX          79
+#define OMAP3XXX_DMA_USIM_RX          80
+#define OMAP3XXX_DMA_UART4_TX         81
+#define OMAP3XXX_DMA_UART4_RX         82
 
 /* omap[123].c */
 /* OMAP2 gp timer */
