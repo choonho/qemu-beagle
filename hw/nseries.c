@@ -26,6 +26,7 @@
 #include "console.h"
 #include "boards.h"
 #include "i2c.h"
+#include "spi.h"
 #include "devices.h"
 #include "flash.h"
 #include "hw.h"
@@ -40,11 +41,8 @@ struct n800_s {
     struct omap_mpu_state_s *cpu;
 
     struct rfbi_chip_s blizzard;
-    struct {
-        void *opaque;
-        uint32_t (*txrx)(void *opaque, uint32_t value, int len);
-        uWireSlave *chip;
-    } ts;
+    DeviceState *mipid;
+    DeviceState *tsc;
 
     int keymap[0x80];
     DeviceState *kbd;
@@ -232,7 +230,7 @@ static void n800_key_event(void *opaque, int keycode)
         return;
     }
 
-    tsc210x_key_event(s->ts.chip, code, !(keycode & 0x80));
+    tsc2301_key_event(s->tsc, code, !(keycode & 0x80));
 }
 
 static const int n800_keys[16] = {
@@ -260,13 +258,12 @@ static void n800_tsc_kbd_setup(struct n800_s *s)
 
     /* XXX: are the three pins inverted inside the chip between the
      * tsc and the cpu (N4111)?  */
-    qemu_irq penirq = NULL;	/* NC */
-    qemu_irq kbirq = qdev_get_gpio_in(s->cpu->gpio, N800_TSC_KP_IRQ_GPIO);
-    qemu_irq dav = qdev_get_gpio_in(s->cpu->gpio, N800_TSC_TS_GPIO);
-
-    s->ts.chip = tsc2301_init(penirq, kbirq, dav);
-    s->ts.opaque = s->ts.chip->opaque;
-    s->ts.txrx = tsc210x_txrx;
+    s->tsc = spi_create_device(omap_mcspi_bus(s->cpu->mcspi, 0), "tsc2301", 0);
+    /* penirq NC */
+    qdev_connect_gpio_out(s->tsc, 1, qdev_get_gpio_in(s->cpu->gpio,
+                                                      N800_TSC_KP_IRQ_GPIO));
+    qdev_connect_gpio_out(s->tsc, 2, qdev_get_gpio_in(s->cpu->gpio,
+                                                      N800_TSC_TS_GPIO));
 
     for (i = 0; i < 0x80; i ++)
         s->keymap[i] = -1;
@@ -276,17 +273,15 @@ static void n800_tsc_kbd_setup(struct n800_s *s)
 
     qemu_add_kbd_event_handler(n800_key_event, s);
 
-    tsc210x_set_transform(s->ts.chip, &n800_pointercal);
+    tsc2301_set_transform(s->tsc, &n800_pointercal);
 }
 
 static void n810_tsc_setup(struct n800_s *s)
 {
-    qemu_irq pintdav = qdev_get_gpio_in(s->cpu->gpio, N810_TSC_TS_GPIO);
-
-    s->ts.opaque = tsc2005_init(pintdav);
-    s->ts.txrx = tsc2005_txrx;
-
-    tsc2005_set_transform(s->ts.opaque, &n810_pointercal, 400, 4000);
+    s->tsc = spi_create_device(omap_mcspi_bus(s->cpu->mcspi, 0), "tsc2005", 0);
+    qdev_connect_gpio_out(s->tsc, 0, qdev_get_gpio_in(s->cpu->gpio,
+                                                      N810_TSC_TS_GPIO));
+    tsc2005_set_transform(s->tsc, &n810_pointercal, 400, 4000);
 }
 
 /* N810 Keyboard controller */
@@ -393,6 +388,7 @@ static void n810_kbd_setup(struct n800_s *s)
 
 /* LCD MIPI DBI-C controller (URAL) */
 struct mipid_s {
+    SPIDevice spi;
     int resp[4];
     int param[4];
     int p;
@@ -412,8 +408,10 @@ struct mipid_s {
     uint32_t id;
 };
 
-static void mipid_reset(struct mipid_s *s)
+static void mipid_reset(DeviceState *qdev)
 {
+    struct mipid_s *s = FROM_SPI_DEVICE(struct mipid_s,
+                                        SPI_DEVICE_FROM_QDEV(qdev));
     if (!s->sleep)
         fprintf(stderr, "%s: Display off\n", __FUNCTION__);
 
@@ -435,9 +433,9 @@ static void mipid_reset(struct mipid_s *s)
     s->gamma = 0;
 }
 
-static uint32_t mipid_txrx(void *opaque, uint32_t cmd, int len)
+static uint32_t mipid_txrx(SPIDevice *spidev, uint32_t cmd, int len)
 {
-    struct mipid_s *s = (struct mipid_s *) opaque;
+    struct mipid_s *s = FROM_SPI_DEVICE(struct mipid_s, spidev);
     uint8_t ret;
 
     if (len > 9)
@@ -457,7 +455,7 @@ static uint32_t mipid_txrx(void *opaque, uint32_t cmd, int len)
         break;
 
     case 0x01:	/* SWRESET */
-        mipid_reset(s);
+        mipid_reset(&s->spi.qdev);
         break;
 
     case 0x02:	/* BSTROFF */
@@ -662,23 +660,29 @@ static uint32_t mipid_txrx(void *opaque, uint32_t cmd, int len)
     return ret;
 }
 
-static void *mipid_init(void)
+static int mipid_init(SPIDevice *spidev)
 {
-    struct mipid_s *s = (struct mipid_s *) g_malloc0(sizeof(*s));
-
-    s->id = 0x838f03;
-    mipid_reset(s);
-
-    return s;
+    return 0;
 }
+
+static SPIDeviceInfo mipid_info = {
+    .init = mipid_init,
+    .txrx = mipid_txrx,
+    .qdev.name = "lcd_mipid",
+    .qdev.size = sizeof(struct mipid_s),
+    .qdev.reset = mipid_reset,
+    .qdev.props = (Property[]) {
+        DEFINE_PROP_UINT32("id", struct mipid_s, id, 0),
+        DEFINE_PROP_END_OF_LIST()
+    }
+};
 
 static void n8x0_spi_setup(struct n800_s *s)
 {
-    void *tsc = s->ts.opaque;
-    void *mipid = mipid_init();
-
-    omap_mcspi_attach(s->cpu->mcspi[0], s->ts.txrx, tsc, 0);
-    omap_mcspi_attach(s->cpu->mcspi[0], mipid_txrx, mipid, 1);
+    s->mipid = spi_create_device_noinit(omap_mcspi_bus(s->cpu->mcspi, 0),
+                                        "lcd_mipid", 1);
+    qdev_prop_set_uint32(s->mipid, "id", 0x838f03);
+    qdev_init_nofail(s->mipid);
 }
 
 /* This task is normally performed by the bootloader.  If we're loading
@@ -1414,10 +1418,16 @@ static QEMUMachine n810_machine = {
     .init = n810_init,
 };
 
+static void nseries_register_devices(void)
+{
+    spi_register_device(&mipid_info);
+}
+
 static void nseries_machine_init(void)
 {
     qemu_register_machine(&n800_machine);
     qemu_register_machine(&n810_machine);
 }
 
+device_init(nseries_register_devices);
 machine_init(nseries_machine_init);
