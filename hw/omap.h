@@ -103,6 +103,7 @@ struct omap_target_agent_s {
     target_phys_addr_t base;
     uint32_t component;
     uint32_t control;
+    uint32_t control_h; /* OMAP3 only */
     uint32_t status;
 };
 struct omap_l4_region_s {
@@ -1115,6 +1116,19 @@ struct omap_mpu_state_s {
     struct omap_eac_s *eac;
     MemoryRegion bootrom;
     int bootrom_initialized;
+
+    /* OMAP3-only */
+    struct omap3_prm_s *omap3_prm;
+    struct omap3_cm_s *omap3_cm;
+    struct omap3_wdt_s *omap3_mpu_wdt;
+    struct omap3_l3_s *omap3_l3;
+    struct omap3_scm_s *omap3_scm;
+    struct omap3_sms_s *omap3_sms;
+    DeviceState *omap3_mmc[3];
+    DeviceState *omap3_usb_otg;
+    DeviceState *omap3_usb_host;
+    DeviceState *omap3_usb_ohci;
+    ram_addr_t bootrom_base;
 };
 
 /* omap1.c */
@@ -1126,6 +1140,15 @@ struct omap_mpu_state_s *omap310_mpu_init(MemoryRegion *system_memory,
 struct omap_mpu_state_s *omap2420_mpu_init(MemoryRegion *sysmem,
                 unsigned long sdram_size,
                 const char *core);
+
+/* omap3.c */
+struct omap_mpu_state_s *omap3_mpu_init(MemoryRegion *sysmem,
+                                        int model,
+                                        unsigned long sdram_size,
+                                        CharDriverState *chr_uart1,
+                                        CharDriverState *chr_uart2,
+                                        CharDriverState *chr_uart3,
+                                        CharDriverState *chr_uart4);
 
 /* omap3_boot.c */
 void omap3_boot_rom_init(struct omap_mpu_state_s *s);
