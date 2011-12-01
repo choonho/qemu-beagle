@@ -3788,6 +3788,7 @@ for bios_file in \
     $source_path/pc-bios/openbios-* \
     $source_path/pc-bios/palcode-*
 do
+    [ -e "$bios_file" ] || continue
     FILES="$FILES pc-bios/`basename $bios_file`"
 done
 mkdir -p $DIRS
