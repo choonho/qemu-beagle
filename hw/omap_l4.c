@@ -20,6 +20,13 @@
 #include "hw.h"
 #include "omap.h"
 
+/* Define to prevent registering L4 TA regions for OMAP3 */
+#define OMAP3_REDUCE_IOREGIONS
+
+/* Define to group all L4 regions together as one I/O region */
+/*# define L4_MUX_HACK*/
+
+/* L4 Interconnect */
 #ifdef L4_MUX_HACK
 static int omap_l4_io_entries;
 static int omap_cpu_io_entry;
@@ -118,7 +125,8 @@ struct omap_l4_s {
     struct omap_target_agent_s ta[0];
 };
 
-struct omap_l4_s *omap_l4_init(target_phys_addr_t base, int ta_num)
+struct omap_l4_s *omap_l4_init(target_phys_addr_t base, int ta_num,
+                               int region_count)
 {
     struct omap_l4_s *bus = g_malloc0(
                     sizeof(*bus) + ta_num * sizeof(*bus->ta));
@@ -128,8 +136,7 @@ struct omap_l4_s *omap_l4_init(target_phys_addr_t base, int ta_num)
 
 #ifdef L4_MUX_HACK
     omap_l4_io_entries = 1;
-    omap_l4_io_entry = g_malloc0(125 * sizeof(*omap_l4_io_entry));
-
+    omap_l4_io_entry = g_malloc0(region_count * sizeof(*omap_l4_io_entry));
     omap_cpu_io_entry =
             cpu_register_io_memory(omap_l4_io_readfn,
                             omap_l4_io_writefn, bus, DEVICE_NATIVE_ENDIAN);
@@ -146,13 +153,55 @@ struct omap_l4_s *omap_l4_init(target_phys_addr_t base, int ta_num)
     return bus;
 }
 
+target_phys_addr_t omap_l4_attach(struct omap_target_agent_s *ta, int region,
+                                  int iotype)
+{
+    target_phys_addr_t base;
+    ssize_t size;
+#ifdef L4_MUX_HACK
+    int i;
+#endif
+
+    if (region < 0 || region >= ta->regions) {
+        fprintf(stderr, "%s: bad io region (%i)\n", __func__, region);
+        exit(-1);
+    }
+
+    base = ta->bus->base + ta->start[region].offset;
+    size = ta->start[region].size;
+    if (iotype) {
+#ifndef L4_MUX_HACK
+        cpu_register_physical_memory(base, size, iotype);
+#else
+        cpu_register_physical_memory(base, size, omap_cpu_io_entry);
+        i = (base - ta->bus->base) / TARGET_PAGE_SIZE;
+        for (; size > 0; size -= TARGET_PAGE_SIZE, i++) {
+            omap_l4_io_readb_fn[i] = omap_l4_io_entry[iotype].mem_read[0];
+            omap_l4_io_readh_fn[i] = omap_l4_io_entry[iotype].mem_read[1];
+            omap_l4_io_readw_fn[i] = omap_l4_io_entry[iotype].mem_read[2];
+            omap_l4_io_writeb_fn[i] = omap_l4_io_entry[iotype].mem_write[0];
+            omap_l4_io_writeh_fn[i] = omap_l4_io_entry[iotype].mem_write[1];
+            omap_l4_io_writew_fn[i] = omap_l4_io_entry[iotype].mem_write[2];
+            omap_l4_io_opaque[i] = omap_l4_io_entry[iotype].opaque;
+        }
+#endif
+    }
+
+    return base;
+}
+
 target_phys_addr_t omap_l4_region_base(struct omap_target_agent_s *ta,
                                        int region)
 {
     return ta->bus->base + ta->start[region].offset;
 }
 
-static uint32_t omap_l4ta_read(void *opaque, target_phys_addr_t addr)
+uint32_t omap_l4_size(struct omap_target_agent_s *ta, int region)
+{
+    return ta->start[region].size;
+}
+
+static uint32_t omap2_l4ta_read(void *opaque, target_phys_addr_t addr)
 {
     struct omap_target_agent_s *s = (struct omap_target_agent_s *) opaque;
 
@@ -171,7 +220,7 @@ static uint32_t omap_l4ta_read(void *opaque, target_phys_addr_t addr)
     return 0;
 }
 
-static void omap_l4ta_write(void *opaque, target_phys_addr_t addr,
+static void omap2_l4ta_write(void *opaque, target_phys_addr_t addr,
                 uint32_t value)
 {
     struct omap_target_agent_s *s = (struct omap_target_agent_s *) opaque;
@@ -193,26 +242,26 @@ static void omap_l4ta_write(void *opaque, target_phys_addr_t addr,
     }
 }
 
-static CPUReadMemoryFunc * const omap_l4ta_readfn[] = {
+static CPUReadMemoryFunc * const omap2_l4ta_readfn[] = {
     omap_badwidth_read16,
-    omap_l4ta_read,
+    omap2_l4ta_read,
     omap_badwidth_read16,
 };
 
-static CPUWriteMemoryFunc * const omap_l4ta_writefn[] = {
+static CPUWriteMemoryFunc * const omap2_l4ta_writefn[] = {
     omap_badwidth_write32,
     omap_badwidth_write32,
-    omap_l4ta_write,
+    omap2_l4ta_write,
 };
 
-struct omap_target_agent_s *omap_l4ta_get(struct omap_l4_s *bus,
+struct omap_target_agent_s *omap2_l4ta_init(struct omap_l4_s *bus,
         const struct omap_l4_region_s *regions,
-	const struct omap_l4_agent_info_s *agents,
+        const struct omap2_l4_agent_info_s *agents,
 	int cs)
 {
     int i, iomemtype;
     struct omap_target_agent_s *ta = NULL;
-    const struct omap_l4_agent_info_s *info = NULL;
+    const struct omap2_l4_agent_info_s *info = NULL;
 
     for (i = 0; i < bus->ta_num; i ++)
         if (agents[i].ta == cs) {
@@ -233,46 +282,165 @@ struct omap_target_agent_s *omap_l4ta_get(struct omap_l4_s *bus,
     ta->status = 0x00000000;
     ta->control = 0x00000200;	/* XXX 01000200 for L4TAO */
 
-    iomemtype = l4_register_io_memory(omap_l4ta_readfn,
-                    omap_l4ta_writefn, ta);
+    iomemtype = l4_register_io_memory(omap2_l4ta_readfn,
+                                      omap2_l4ta_writefn, ta);
     ta->base = omap_l4_attach(ta, info->ta_region, iomemtype);
 
     return ta;
 }
 
-target_phys_addr_t omap_l4_attach(struct omap_target_agent_s *ta, int region,
-                int iotype)
+#if defined(L4_MUX_HACK) || !defined(OMAP3_REDUCE_IOREGIONS)
+static uint32_t omap3_l4ta_read(void *opaque, target_phys_addr_t addr)
 {
-    target_phys_addr_t base;
-    ssize_t size;
-#ifdef L4_MUX_HACK
-    int i;
-#endif
+    struct omap_target_agent_s *s = (struct omap_target_agent_s *)opaque;
 
-    if (region < 0 || region >= ta->regions) {
-        fprintf(stderr, "%s: bad io region (%i)\n", __FUNCTION__, region);
-        exit(-1);
+    switch (addr) {
+    case 0x00: /* COMPONENT_L */
+        return s->component;
+    case 0x04: /* COMPONENT_H */
+        return 0;
+    case 0x18: /* CORE_L */
+        return s->component;
+    case 0x1c: /* CORE_H */
+        return s->component >> 16;
+    case 0x20: /* AGENT_CONTROL_L */
+        return s->control;
+    case 0x24: /* AGENT_CONTROL_H */
+        return s->control_h;
+    case 0x28: /* AGENT_STATUS_L */
+        return s->status;
+    case 0x2c: /* AGENT_STATUS_H */
+        return 0;
+    default:
+        break;
     }
 
-    base = ta->bus->base + ta->start[region].offset;
-    size = ta->start[region].size;
-    if (iotype) {
-#ifndef L4_MUX_HACK
-        cpu_register_physical_memory(base, size, iotype);
-#else
-        cpu_register_physical_memory(base, size, omap_cpu_io_entry);
-        i = (base - ta->bus->base) / TARGET_PAGE_SIZE;
-        for (; size > 0; size -= TARGET_PAGE_SIZE, i ++) {
-            omap_l4_io_readb_fn[i] = omap_l4_io_entry[iotype].mem_read[0];
-            omap_l4_io_readh_fn[i] = omap_l4_io_entry[iotype].mem_read[1];
-            omap_l4_io_readw_fn[i] = omap_l4_io_entry[iotype].mem_read[2];
-            omap_l4_io_writeb_fn[i] = omap_l4_io_entry[iotype].mem_write[0];
-            omap_l4_io_writeh_fn[i] = omap_l4_io_entry[iotype].mem_write[1];
-            omap_l4_io_writew_fn[i] = omap_l4_io_entry[iotype].mem_write[2];
-            omap_l4_io_opaque[i] = omap_l4_io_entry[iotype].opaque;
+    OMAP_BAD_REG(s->base + addr);
+    return 0;
+}
+
+static void omap3_l4ta_write(void *opaque, target_phys_addr_t addr,
+                             uint32_t value)
+{
+    struct omap_target_agent_s *s = (struct omap_target_agent_s *)opaque;
+
+    switch (addr) {
+    case 0x00: /* COMPONENT_L */
+    case 0x04: /* COMPONENT_H */
+    case 0x18: /* CORE_L */
+    case 0x1c: /* CORE_H */
+        OMAP_RO_REG(s->base + addr);
+        break;
+    case 0x20: /* AGENT_CONTROL_L */
+        s->control = value & 0x00000701;
+        break;
+    case 0x24: /* AGENT_CONTROL_H */
+        s->control_h = value & 0x100; /* TODO: shouldn't this be read-only? */
+        break;
+    case 0x28: /* AGENT_STATUS_L */
+        if (value & 0x100) {
+            s->status &= ~0x100; /* REQ_TIMEOUT */
         }
-#endif
+        break;
+    case 0x2c: /* AGENT_STATUS_H */
+        /* no writable bits although the register is listed as RW */
+        break;
+    default:
+        OMAP_BAD_REG(s->base + addr);
+        break;
+    }
+}
+
+static void omap3_l4ta_save_state(QEMUFile *f, void *opaque)
+{
+    struct omap_target_agent_s *s = (struct omap_target_agent_s *)opaque;
+
+    qemu_put_be32(f, s->control);
+    qemu_put_be32(f, s->control_h);
+    qemu_put_be32(f, s->status);
+}
+
+static int omap3_l4ta_load_state(QEMUFile *f, void *opaque, int version_id)
+{
+    struct omap_target_agent_s *s = (struct omap_target_agent_s *)opaque;
+
+    if (version_id) {
+        return -EINVAL;
     }
 
-    return base;
+    s->control = qemu_get_be32(f);
+    s->control_h = qemu_get_be32(f);
+    s->status = qemu_get_be32(f);
+
+    return 0;
+}
+
+static CPUReadMemoryFunc *omap3_l4ta_readfn[] = {
+    omap_badwidth_read32,
+    omap_badwidth_read32,
+    omap3_l4ta_read,
+};
+
+static CPUWriteMemoryFunc *omap3_l4ta_writefn[] = {
+    omap_badwidth_write32,
+    omap_badwidth_write32,
+    omap3_l4ta_write,
+};
+#endif
+
+struct omap_target_agent_s *omap3_l4ta_init(
+    struct omap_l4_s *bus,
+    const struct omap_l4_region_s *regions,
+    const struct omap3_l4_agent_info_s *agents,
+    int cs)
+{
+#if defined(L4_MUX_HACK) || !defined(OMAP3_REDUCE_IOREGIONS)
+    int iomemtype;
+#endif
+    int i;
+    struct omap_target_agent_s *ta = NULL;
+    const struct omap3_l4_agent_info_s *info = NULL;
+
+    for (i = 0; i < bus->ta_num; i++)
+        if (agents[i].agent_id == cs) {
+            ta = &bus->ta[i];
+            info = &agents[i];
+            break;
+        }
+    if (!ta) {
+        hw_error("%s: invalid agent id (%i)", __func__, cs);
+    }
+    if (ta->bus) {
+        hw_error("%s: target agent (%d) already initialized", __func__, cs);
+    }
+
+    ta->bus = bus;
+    ta->start = &regions[info->first_region_id];
+    ta->regions = info->region_count;
+
+    ta->component = ('Q' << 24) | ('E' << 16) | ('M' << 8) | ('U' << 0);
+    ta->status = 0x00000000;
+    ta->control = 0x00000200;
+
+    for (i = 0; i < info->region_count; i++) {
+        if (regions[info->first_region_id + i].access == L4TYPE_TA) {
+            break;
+        }
+    }
+    if (i >= info->region_count) {
+        hw_error("%s: specified agent (%d) has no TA region", __func__, cs);
+    }
+
+#if defined(L4_MUX_HACK) || !defined(OMAP3_REDUCE_IOREGIONS)
+    iomemtype = l4_register_io_memory(0, omap3_l4ta_readfn,
+                                      omap3_l4ta_writefn, ta);
+    ta->base = omap_l4_attach(ta, i, iomemtype);
+
+    register_savevm("omap3_l4ta", ta->base >> 8, 0,
+                    omap3_l4ta_save_state, omap3_l4ta_load_state, ta);
+#else
+    ta->base = ta->bus->base + ta->start[i].offset;
+#endif
+
+    return ta;
 }
