@@ -20,6 +20,8 @@
 #include "memory.h"
 # define hw_omap_h		"omap.h"
 
+#include "spi.h"
+
 # define OMAP_EMIFS_BASE	0x00000000
 # define OMAP2_Q0_BASE		0x00000000
 # define OMAP_CS0_BASE		0x00000000
@@ -895,15 +897,7 @@ void omap_uwire_attach(struct omap_uwire_s *s,
                 uWireSlave *slave, int chipselect);
 
 /* OMAP2 spi */
-struct omap_mcspi_s;
-struct omap_mcspi_s *omap_mcspi_init(struct omap_target_agent_s *ta,
-                                     struct omap_mpu_state_s *mp,
-                                     int chnum, qemu_irq irq, qemu_irq *drq,
-                                     omap_clk fclk, omap_clk iclk);
-void omap_mcspi_attach(struct omap_mcspi_s *s,
-                uint32_t (*txrx)(void *opaque, uint32_t, int), void *opaque,
-                int chipselect);
-void omap_mcspi_reset(struct omap_mcspi_s *s);
+SPIBus *omap_mcspi_bus(DeviceState *omap_mcspi, int bus_number);
 
 struct I2SCodec {
     void *opaque;
@@ -1145,7 +1139,7 @@ struct omap_mpu_state_s {
     struct omap_gpmc_s *gpmc;
     struct omap_sysctl_s *sysc;
 
-    struct omap_mcspi_s *mcspi[2];
+    DeviceState *mcspi;
 
     struct omap_dss_s *dss;
 
