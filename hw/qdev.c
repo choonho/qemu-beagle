@@ -768,7 +768,7 @@ static BusState *qbus_find_bus(DeviceState *dev, char *elem)
     return NULL;
 }
 
-static DeviceState *qbus_find_dev(BusState *bus, char *elem)
+static DeviceState *qbus_find_dev(BusState *bus, const char *elem)
 {
     DeviceState *dev;
 
@@ -1598,6 +1598,48 @@ void qdev_property_add_str(DeviceState *dev, const char *name,
                       set ? qdev_property_set_str : NULL,
                       qdev_property_release_str,
                       prop, errp);
+}
+
+static DeviceState *qbus_find_dev_recursive(BusState *bus, const char *elem)
+{
+    DeviceState *dev = qbus_find_dev(bus, elem);
+    if (!dev) {
+        BusState *child;
+        DeviceState *found;
+        QTAILQ_FOREACH(dev, &bus->children, sibling) {
+            QLIST_FOREACH(child, &dev->child_bus, sibling) {
+                if ((found = qbus_find_dev_recursive(child, elem))) {
+                    return found;
+                }
+            }
+        }
+    }
+    return dev;
+}
+
+void qmp_change_qdev(const char *device, const char *target,
+                     bool has_arg, const char *arg, Error **errp)
+{
+    const char *sep = strrchr(device, '/');
+    DeviceState *dev = NULL;
+    if (sep) {
+        char *device_path = g_strdup(device);
+        device_path[sep - device] = 0;
+        BusState *bus = qbus_find(device_path);
+        g_free(device_path);
+        if (bus) {
+            dev = qbus_find_dev(bus, sep + 1);
+        }
+    } else {
+        dev = qbus_find_dev_recursive(main_system_bus, device);
+    }
+    if (!dev) {
+        error_set(errp, QERR_DEVICE_NOT_FOUND, device);
+    }
+    if (!qdev_get_info(dev)->change) {
+        error_set(errp, QERR_INVALID_PARAMETER, device);
+    }
+    qdev_get_info(dev)->change(dev, target, arg);
 }
 
 void qdev_machine_init(void)
