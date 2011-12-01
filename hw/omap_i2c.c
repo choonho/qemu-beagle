@@ -672,12 +672,12 @@ static const MemoryRegionOps omap_i2c_ops = {
         .read = {
             omap_i2c_readb,
             omap_i2c_read,
-            omap_badwidth_read16,
+            omap_i2c_read,
         },
         .write = {
             omap_i2c_writeb, /* Only the last fifo write can be 8 bit.  */
             omap_i2c_write,
-            omap_badwidth_write16,
+            omap_i2c_write,
         },
     },
     .endianness = DEVICE_NATIVE_ENDIAN,
@@ -686,7 +686,7 @@ static const MemoryRegionOps omap_i2c_ops = {
 static CPUWriteMemoryFunc * const omap_i2c_writefn[] = {
     omap_i2c_writeb,	/* Only the last fifo write can be 8 bit.  */
     omap_i2c_write,
-    omap_badwidth_write16,
+    omap_i2c_write,
 };
 
 static int omap_i2c_bus_post_load(void *opaque, int version_id)
