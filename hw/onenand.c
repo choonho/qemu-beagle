@@ -692,6 +692,13 @@ static void onenand_write(void *opaque, target_phys_addr_t addr,
             s->boot[0][2 << s->shift] = s->wpstatus & 0xff;
             break;
 
+        case 0x0000:
+            /* ignore zero writes without error messages,
+             * linux omap2/3 kernel will issue these upon
+             * powerdown/reset sequence.
+             */
+            break;
+
         default:
             fprintf(stderr, "%s: unknown OneNAND boot command %"PRIx64"\n",
                             __FUNCTION__, value);
