@@ -871,12 +871,34 @@ SerialState *serial_mm_init(MemoryRegion *address_space,
     serial_init_core(s);
     vmstate_register(NULL, base, &vmstate_serial, s);
 
-    memory_region_init_io(&s->io, &serial_mm_ops[end], s,
-                          "serial", 8 << it_shift);
-    memory_region_add_subregion(address_space, base, &s->io);
+    if (address_space) {
+        memory_region_init_io(&s->io, &serial_mm_ops[end], s,
+                              "serial", 8 << it_shift);
+        memory_region_add_subregion(address_space, base, &s->io);
+    }
 
     serial_update_msl(s);
     return s;
+}
+
+void serial_change_char_driver(SerialState *s, CharDriverState *chr)
+{
+    /* TODO this is somewhat guesswork, and pretty ugly anyhow */
+    qemu_chr_add_handlers(s->chr, NULL, NULL, NULL, NULL);
+    s->chr = chr;
+    qemu_chr_add_handlers(s->chr, serial_can_receive1, serial_receive1,
+                          serial_event, s);
+    serial_update_msl(s);
+}
+
+const MemoryRegionOps *serial_get_memops(enum device_endian end)
+{
+    return &serial_mm_ops[end];
+}
+
+qemu_irq *serial_get_irq(SerialState *s)
+{
+    return &s->irq;
 }
 
 static void serial_isa_class_initfn(ObjectClass *klass, void *data)
