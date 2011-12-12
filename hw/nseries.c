@@ -1452,6 +1452,7 @@ static void n8x0_init(ram_addr_t ram_size, const char *boot_device,
         n810_tsc_setup(s);
         n810_kbd_setup(s);
     }
+    cursor_hide = 0; // who wants to use touchscreen without a pointer?
     n8x0_spi_setup(s);
     n8x0_dss_setup(s);
     n8x0_cbus_setup(s);
