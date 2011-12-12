@@ -907,21 +907,7 @@ struct omap_mpu_state_s {
     struct dpll_ctl_s *dpll[3];
 
     omap_clk clks;
-    struct {
-        int cold_start;
-        int clocking_scheme;
-        uint16_t arm_ckctl;
-        uint16_t arm_idlect1;
-        uint16_t arm_idlect2;
-        uint16_t arm_ewupct;
-        uint16_t arm_rstct1;
-        uint16_t arm_rstct2;
-        uint16_t arm_ckout1;
-        int dpll1_mode;
-        uint16_t dsp_idlect1;
-        uint16_t dsp_idlect2;
-        uint16_t dsp_rstct2;
-    } clkm;
+    struct omap_clkm_s *clkm;
 
     /* OMAP2-only peripherals */
     struct omap_l4_s *l4;
