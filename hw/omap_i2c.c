@@ -353,10 +353,15 @@ static void omap_i2c_write(void *opaque, target_phys_addr_t addr,
             break;
         case 0x04: /* I2C_IE */
             TRACE("IE = %04x", value);
-            if (s->revision >= OMAP3_INTR_REV)
+            if (s->revision < OMAP2_INTR_REV) {
+                s->mask = value & 0x1f;
+            } else if (s->revision < OMAP3_INTR_REV) {
+                s->mask = value & 0x3f;
+            } else if (s->revision == OMAP3_INTR_REV) {
                 s->mask = value & 0x63ff;
-            else
-                s->mask = value & (s->revision < OMAP2_INTR_REV ? 0x1f : 0x3f);
+            } else { /* omap3630 */
+                s->mask = value & 0x6fff;
+            }
             omap_i2c_interrupts_update(s);
             break;
         case 0x08: /* I2C_STAT */
@@ -365,15 +370,24 @@ static void omap_i2c_write(void *opaque, target_phys_addr_t addr,
             } else {
                 TRACE("STAT = %04x", value);
                 /* RRDY and XRDY are reset by hardware. (in all versions???) */
-                s->stat &= ~(value & (s->revision < OMAP3_INTR_REV ? 0x27 : 0x63e7));
+                if (s->revision < OMAP3_INTR_REV) {
+                    value &= 0x27;
+                } else if (s->revision == OMAP3_INTR_REV) {
+                    value &= 0x63e7;
+                } else { /* omap3630 */
+                    value &= 0x6ee7;
+                }
+                s->stat &= ~value;
                 omap_i2c_interrupts_update(s);
             }
             break;
         case 0x0c: /* I2C_IV / I2C_WE */
             if (s->revision < OMAP3_INTR_REV) {
                 OMAP_RO_REG(addr);
-            } else {
+            } else if (s->revision == OMAP3_INTR_REV) {
                 s->we = value & 0x636f;
+            } else { /* omap3630 */
+                s->we = value & 0x6f6f;
             }
             break;
         case 0x14: /* I2C_BUF */
@@ -496,20 +510,33 @@ static void omap_i2c_write(void *opaque, target_phys_addr_t addr,
                                    ? 0xff : 0xffff);
             break;
         case 0x3c: /* I2C_SYSTEST */
-            value &= s->revision < OMAP3_INTR_REV ? 0xf805 : 0xf815;
+            if (s->revision < OMAP3_INTR_REV) {
+                value &= 0xf805;
+            } else if (s->revision == OMAP3_INTR_REV) {
+                value &= 0xf815;
+            } else { /* omap3630 */
+                value = (value & 0xf835) | 0x1c00;
+            }
             if ((value & (1 << 15))) { /* ST_EN */
                 fprintf(stderr, "%s: System Test not supported\n",
                         __FUNCTION__);
                 s->test = (s->test & 0x0a) | value;
-            } else
-                s->test = (s->test & 0x1f) | (value & 0xf800);
-            if (value & (1 << 11)) /* SBB */
+            } else {
+                value &= ~0xff;
+                s->test = (s->test & 0x1f) | value;
+            }
+            if (value & (1 << 11)) { /* SBB */
                 if (s->revision >= OMAP2_INTR_REV) {
                     s->stat |= 0x3f;
-                    if (s->revision >= OMAP3_INTR_REV)
-                        s->stat |= 0x600;
+                    if (s->revision >= OMAP3_INTR_REV) {
+                        s->stat |= 0x6300;
+                        if (s->revision > OMAP3_INTR_REV) {
+                            s->stat |= 0x0c00;
+                        }
+                    }
                     omap_i2c_interrupts_update(s);
                 }
+            }
             break;
         case 0x44: /* I2C_OA1 */
         case 0x48: /* I2C_OA2 */
