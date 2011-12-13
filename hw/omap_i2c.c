@@ -51,9 +51,11 @@ struct omap_i2c_s {
     uint8_t fifo[I2C_MAX_FIFO_SIZE];
 };
 
-#define OMAP2_INTR_REV	  0x34
-#define OMAP2_GC_REV	  0x34
+/* I2C controller revision register values */
+#define OMAP1_INTR_REV    0x11
+#define OMAP2_INTR_REV    0x34
 #define OMAP3_INTR_REV    0x3c
+#define OMAP3630_INTR_REV 0x40
 
 //#define I2C_DEBUG
 #ifdef I2C_DEBUG
@@ -344,7 +346,7 @@ static void omap_i2c_write(void *opaque, target_phys_addr_t addr,
             if (s->revision >= OMAP3_INTR_REV)
                 s->mask = value & 0x63ff;
             else
-                s->mask = value & (s->revision < OMAP2_GC_REV ? 0x1f : 0x3f);
+                s->mask = value & (s->revision < OMAP2_INTR_REV ? 0x1f : 0x3f);
             omap_i2c_interrupts_update(s);
             break;
         case 0x08: /* I2C_STAT */
