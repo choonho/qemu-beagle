@@ -20,17 +20,21 @@
 #include "hw.h"
 #include "i2c.h"
 #include "omap.h"
+#include "sysbus.h"
 
 #define I2C_MAX_FIFO_SIZE (1 << 6)
 #define I2C_FIFO_SIZE_MASK ((I2C_MAX_FIFO_SIZE) - 1)
 
-struct omap_i2c_s {
+typedef struct omap_i2c_bus_s {
+    i2c_bus *bus;
     MemoryRegion iomem;
     qemu_irq irq;
     qemu_irq drq[2];
-    i2c_bus *bus;
 
     uint8_t revision;
+    int fifosize;
+    char *id;
+
     uint16_t mask;
     uint16_t stat;
     uint16_t we;
@@ -47,9 +51,15 @@ struct omap_i2c_s {
     uint16_t test;
     int fifostart;
     int fifolen;
-    int fifosize;
     uint8_t fifo[I2C_MAX_FIFO_SIZE];
-};
+} OMAPI2CBusState;
+
+typedef struct omap_i2c_s {
+    SysBusDevice busdev;
+    int32_t mpu_model;
+    int buscount;
+    OMAPI2CBusState *bus;
+} OMAPI2CState;
 
 /* I2C controller revision register values */
 #define OMAP1_INTR_REV    0x11
@@ -64,7 +74,7 @@ struct omap_i2c_s {
 #define TRACE(...)
 #endif
 
-static void omap_i2c_interrupts_update(struct omap_i2c_s *s)
+static void omap_i2c_interrupts_update(OMAPI2CBusState *s)
 {
     TRACE("IRQ=%04x,RDRQ=%d,XDRQ=%d", 
           s->stat & s->mask,
@@ -77,7 +87,7 @@ static void omap_i2c_interrupts_update(struct omap_i2c_s *s)
         qemu_set_irq(s->drq[1], (s->stat >> 4) & 1); /* XRDY */
 }
 
-static void omap_i2c_fifo_run(struct omap_i2c_s *s)
+static void omap_i2c_fifo_run(OMAPI2CBusState *s)
 {
     int ack = 1, i;
 
@@ -167,7 +177,7 @@ static void omap_i2c_fifo_run(struct omap_i2c_s *s)
     TRACE("finished, STAT = %04x, CNT = %d", s->stat, s->count_cur);
 }
 
-void omap_i2c_reset(struct omap_i2c_s *s)
+static void omap_i2c_bus_reset(OMAPI2CBusState *s)
 {
     s->mask = 0;
     s->stat = 0;
@@ -195,7 +205,7 @@ void omap_i2c_reset(struct omap_i2c_s *s)
 
 static uint32_t omap_i2c_read(void *opaque, target_phys_addr_t addr)
 {
-    struct omap_i2c_s *s = (struct omap_i2c_s *) opaque;
+    OMAPI2CBusState *s = opaque;
     int offset = addr & OMAP_MPUI_REG_MASK;
     uint16_t ret;
 
@@ -330,7 +340,7 @@ static uint32_t omap_i2c_read(void *opaque, target_phys_addr_t addr)
 static void omap_i2c_write(void *opaque, target_phys_addr_t addr,
                 uint32_t value)
 {
-    struct omap_i2c_s *s = (struct omap_i2c_s *) opaque;
+    OMAPI2CBusState *s = opaque;
     int offset = addr & OMAP_MPUI_REG_MASK;
     int nack;
 
@@ -422,7 +432,7 @@ static void omap_i2c_write(void *opaque, target_phys_addr_t addr,
             }
             TRACE("SYSC = %04x", value);
             if (value & 2)
-                omap_i2c_reset(s);
+                omap_i2c_bus_reset(s);
             else if (s->revision >= OMAP3_INTR_REV)
                 s->sysc = value & 0x031d;
             break;
@@ -431,7 +441,7 @@ static void omap_i2c_write(void *opaque, target_phys_addr_t addr,
             s->control = value & (s->revision < OMAP3_INTR_REV ? 0xcf87 : 0xbff3);
             if (~value & (1 << 15)) { /* I2C_EN */
                 if (s->revision < OMAP2_INTR_REV)
-                    omap_i2c_reset(s);
+                    omap_i2c_bus_reset(s);
                 break;
             }
             if (s->revision >= OMAP3_INTR_REV && ((value >> 12) & 3) > 1) { /* OPMODE */
@@ -531,7 +541,7 @@ static void omap_i2c_write(void *opaque, target_phys_addr_t addr,
 static void omap_i2c_writeb(void *opaque, target_phys_addr_t addr,
                 uint32_t value)
 {
-    struct omap_i2c_s *s = (struct omap_i2c_s *) opaque;
+    OMAPI2CBusState *s = opaque;
     int offset = addr & OMAP_MPUI_REG_MASK;
 
     switch (offset) {
@@ -580,70 +590,121 @@ static CPUWriteMemoryFunc * const omap_i2c_writefn[] = {
     omap_badwidth_write16,
 };
 
-static struct omap_i2c_s *omap_i2c_common_init(uint8_t rev, int fifosize,
-                                               qemu_irq irq, qemu_irq *dma)
+static int omap_i2c_bus_post_load(void *opaque, int version_id)
 {
-    struct omap_i2c_s *s = g_malloc0(sizeof(*s));
+    OMAPI2CBusState *s = opaque;
+    omap_i2c_interrupts_update(s);
+    return 0;
+}
 
-    if (fifosize > I2C_MAX_FIFO_SIZE) {
-        fprintf(stderr, "%s: maximum FIFO size is %d (tried to use %d)\n",
-                __FUNCTION__, I2C_MAX_FIFO_SIZE, fifosize);
-        exit(-1);
+static const VMStateDescription vmstate_omap_i2c_bus = {
+    .name = "omap_i2c",
+    .version_id = 1,
+    .minimum_version_id = 1,
+    .minimum_version_id_old = 1,
+    .post_load = omap_i2c_bus_post_load,
+    .fields = (VMStateField[]) {
+        VMSTATE_UINT16(mask, OMAPI2CBusState),
+        VMSTATE_UINT16(stat, OMAPI2CBusState),
+        VMSTATE_UINT16(we, OMAPI2CBusState),
+        VMSTATE_UINT16(dma, OMAPI2CBusState),
+        VMSTATE_UINT16(count, OMAPI2CBusState),
+        VMSTATE_INT32(count_cur, OMAPI2CBusState),
+        VMSTATE_UINT16(sysc, OMAPI2CBusState),
+        VMSTATE_UINT16(control, OMAPI2CBusState),
+        VMSTATE_UINT16_ARRAY(own_addr, OMAPI2CBusState, 4),
+        VMSTATE_UINT16(slave_addr, OMAPI2CBusState),
+        VMSTATE_UINT8(sblock, OMAPI2CBusState),
+        VMSTATE_UINT8(divider, OMAPI2CBusState),
+        VMSTATE_UINT16_ARRAY(times, OMAPI2CBusState, 2),
+        VMSTATE_UINT16(test, OMAPI2CBusState),
+        VMSTATE_INT32(fifostart, OMAPI2CBusState),
+        VMSTATE_INT32(fifolen, OMAPI2CBusState),
+        VMSTATE_INT32(fifosize, OMAPI2CBusState),
+        VMSTATE_UINT8_ARRAY(fifo, OMAPI2CBusState, I2C_MAX_FIFO_SIZE),
+        VMSTATE_END_OF_LIST()
     }
-    s->revision = rev;
-    s->irq = irq;
-    s->drq[0] = dma[0];
-    s->drq[1] = dma[1];
-    s->bus = i2c_init_bus(NULL, "i2c");
-    s->fifosize = fifosize;
-    omap_i2c_reset(s);
-    return s;
-}
+};
 
-struct omap_i2c_s *omap_i2c_init(MemoryRegion *sysmem,
-                                 target_phys_addr_t base,
-                                 qemu_irq irq,
-                                 qemu_irq *dma,
-                                 omap_clk clk)
+static int omap_i2c_init(SysBusDevice *dev)
 {
-    struct omap_i2c_s *s = omap_i2c_common_init(0x11, 4, irq, dma);
-
-    memory_region_init_io(&s->iomem, &omap_i2c_ops, s, "omap.i2c", 0x800);
-    memory_region_add_subregion(sysmem, base, &s->iomem);
-    return s;
-}
-
-struct omap_i2c_s *omap2_i2c_init(struct omap_target_agent_s *ta,
-                qemu_irq irq, qemu_irq *dma, omap_clk fclk, omap_clk iclk)
-{
-    struct omap_i2c_s *s = omap_i2c_common_init(0x34, 4, irq, dma);
-    memory_region_init_io(&s->iomem, &omap_i2c_ops, s, "omap2.i2c",
-                          omap_l4_region_size(ta, 0));
-    omap_l4_attach(ta, 0, &s->iomem);
-    return s;
-}
-
-struct omap_i2c_s *omap3_i2c_init(struct omap_target_agent_s *ta,
-                                  qemu_irq irq, qemu_irq *dma,
-                                  omap_clk fclk, omap_clk iclk,
-                                  int fifosize)
-{
-    struct omap_i2c_s *s;
-
-    if (fifosize != 8 && fifosize != 16 && fifosize != 32 && fifosize != 64) {
-        fprintf(stderr, "%s: unsupported FIFO depth specified (%d)\n",
-                __FUNCTION__, fifosize);
-        exit(-1);
+    int i;
+    uint8_t rev;
+    OMAPI2CState *s = FROM_SYSBUS(OMAPI2CState, dev);
+    if (s->mpu_model < omap2410) {
+        rev = OMAP1_INTR_REV;
+        s->buscount = 1;
+    }  else if (s->mpu_model < omap3430) {
+        rev = OMAP2_INTR_REV;
+        s->buscount = 2;
+    } else {
+        s->buscount = 3;
+        if (s->mpu_model < omap3630) {
+            rev = OMAP3_INTR_REV;
+        } else {
+            rev = OMAP3630_INTR_REV;
+        }
     }
-    s = omap_i2c_common_init(OMAP3_INTR_REV, fifosize, irq, dma);
-
-    memory_region_init_io(&s->iomem, &omap_i2c_ops, s, "omap2.i2c",
-                          omap_l4_region_size(ta, 0));
-    omap_l4_attach(ta, 0, &s->iomem);
-    return s;
+    s->bus = g_new0(OMAPI2CBusState, s->buscount);
+    for (i = 0; i < s->buscount; i++) {
+        s->bus[i].revision = rev;
+        if (rev < OMAP3_INTR_REV) {
+            s->bus[i].fifosize = 4;
+        } else {
+            s->bus[i].fifosize = (i < 2) ? 8 : 64;
+        }
+        sysbus_init_irq(dev, &s->bus[i].irq);
+        sysbus_init_irq(dev, &s->bus[i].drq[0]);
+        sysbus_init_irq(dev, &s->bus[i].drq[1]);
+        memory_region_init_io(&s->bus[i].iomem, &omap_i2c_ops, &s->bus[i],
+                              "omap.i2c",
+                              (rev < OMAP2_INTR_REV) ? 0x800 : 0x1000);
+        sysbus_init_mmio(dev, &s->bus[i].iomem);
+        s->bus[i].bus = i2c_init_bus(&dev->qdev, NULL);
+        vmstate_register(&dev->qdev, i, &vmstate_omap_i2c_bus, &s->bus[i]);
+    }
+    return 0;
 }
 
-i2c_bus *omap_i2c_bus(struct omap_i2c_s *s)
+static void omap_i2c_reset(DeviceState *dev)
 {
-    return s->bus;
+    OMAPI2CState *s = FROM_SYSBUS(OMAPI2CState, sysbus_from_qdev(dev));
+    int i;
+    for (i = 0; i < s->buscount; i++) {
+        omap_i2c_bus_reset(&s->bus[i]);
+    }
 }
+
+static void omap_i2c_class_init(ObjectClass *klass, void *data)
+{
+    SysBusDeviceClass *k = SYS_BUS_DEVICE_CLASS(klass);
+    k->init = omap_i2c_init;
+}
+
+static DeviceInfo omap_i2c_info = {
+    .name = "omap_i2c",
+    .size = sizeof(OMAPI2CState),
+    .reset = omap_i2c_reset,
+    .class_init = omap_i2c_class_init,
+    .props = (Property[]) {
+        DEFINE_PROP_INT32("mpu_model", OMAPI2CState, mpu_model, 0),
+        DEFINE_PROP_END_OF_LIST()
+    }
+};
+
+static void omap_i2c_register_devices(void)
+{
+    sysbus_register_withprop(&omap_i2c_info);
+}
+
+i2c_bus *omap_i2c_bus(DeviceState *omap_i2c, int n)
+{
+    OMAPI2CState *s = FROM_SYSBUS(OMAPI2CState, sysbus_from_qdev(omap_i2c));
+    if (n >= s->buscount) {
+        hw_error("%s: requested bus %d (maximum allowed bus number is %d)\n",
+                 __FUNCTION__, n, s->buscount - 1);
+    }
+    return s->bus[n].bus;
+}
+
+device_init(omap_i2c_register_devices)
