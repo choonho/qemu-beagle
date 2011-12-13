@@ -63,7 +63,7 @@ typedef struct omap_i2c_s {
 
 /* I2C controller revision register values */
 #define OMAP1_INTR_REV    0x11
-#define OMAP2_INTR_REV    0x34
+#define OMAP2_INTR_REV	  0x34
 #define OMAP3_INTR_REV    0x3c
 #define OMAP3630_INTR_REV 0x40
 
