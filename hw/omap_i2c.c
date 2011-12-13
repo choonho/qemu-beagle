@@ -51,9 +51,9 @@ struct omap_i2c_s {
     uint8_t fifo[I2C_MAX_FIFO_SIZE];
 };
 
-#define OMAP2_INTR_REV	0x34
-#define OMAP2_GC_REV	0x34
-#define OMAP3_INTR_REV  0x3c
+#define OMAP2_INTR_REV	  0x34
+#define OMAP2_GC_REV	  0x34
+#define OMAP3_INTR_REV    0x3c
 
 //#define I2C_DEBUG
 #ifdef I2C_DEBUG
@@ -348,9 +348,9 @@ static void omap_i2c_write(void *opaque, target_phys_addr_t addr,
             omap_i2c_interrupts_update(s);
             break;
         case 0x08: /* I2C_STAT */
-            if (s->revision < OMAP2_INTR_REV)
+            if (s->revision < OMAP2_INTR_REV) {
                 OMAP_RO_REG(addr);
-            else {
+            } else {
                 TRACE("STAT = %04x", value);
                 /* RRDY and XRDY are reset by hardware. (in all versions???) */
                 s->stat &= ~(value & (s->revision < OMAP3_INTR_REV ? 0x27 : 0x63e7));
@@ -358,10 +358,11 @@ static void omap_i2c_write(void *opaque, target_phys_addr_t addr,
             }
             break;
         case 0x0c: /* I2C_IV / I2C_WE */
-            if (s->revision < OMAP3_INTR_REV)
+            if (s->revision < OMAP3_INTR_REV) {
                 OMAP_RO_REG(addr);
-            else
+            } else {
                 s->we = value & 0x636f;
+            }
             break;
         case 0x14: /* I2C_BUF */
             TRACE("BUF = %04x", value);
@@ -501,9 +502,9 @@ static void omap_i2c_write(void *opaque, target_phys_addr_t addr,
         case 0x44: /* I2C_OA1 */
         case 0x48: /* I2C_OA2 */
         case 0x4c: /* I2C_OA3 */
-            if (s->revision < OMAP3_INTR_REV)
+            if (s->revision < OMAP3_INTR_REV) {
                 OMAP_BAD_REG(addr);
-            else {
+            } else {
                 addr = (addr >> 2) & 3;
                 TRACE("OA%d = %04x", (int)addr, value);
                 s->own_addr[addr] = value & 0x3ff;
