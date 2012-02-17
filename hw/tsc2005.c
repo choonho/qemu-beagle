@@ -54,6 +54,7 @@ typedef struct {
     uint16_t aux_thr[2];
 
     int tr[8];
+    int z1_cons, z2_cons;
 } TSC2005State;
 
 enum {
@@ -98,10 +99,15 @@ static const uint16_t mode_regs[16] = {
     ((s->y * s->tr[0] - s->x * s->tr[1]) / s->tr[2] + s->tr[3])
 #define Y_TRANSFORM(s)			\
     ((s->y * s->tr[4] - s->x * s->tr[5]) / s->tr[6] + s->tr[7])
+/*
 #define Z1_TRANSFORM(s)			\
-    ((400 - ((s)->x >> 7) + ((s)->pressure << 10)) << 4)
+    (((s)->z1_cons - ((s)->x >> 7) + ((s)->pressure << 10)) << 4)
 #define Z2_TRANSFORM(s)			\
-    ((4000 + ((s)->y >> 7) - ((s)->pressure << 10)) << 4)
+    (((s)->z2_cons + ((s)->y >> 7) - ((s)->pressure << 10)) << 4)
+ */
+/* these simpler forms work much better */
+#define Z1_TRANSFORM(s) (((s)->z1_cons) << 4)
+#define Z2_TRANSFORM(s) (((s)->z2_cons) << 4)
 
 #define AUX_VAL				(700 << 4)	/* +/- 3 at 12-bit */
 #define TEMP1_VAL			(1264 << 4)	/* +/- 5 at 12-bit */
@@ -542,6 +548,9 @@ void *tsc2005_init(qemu_irq pintdav)
     s->tr[6] = 1;
     s->tr[7] = 0;
 
+    s->z1_cons = 400;
+    s->z2_cons = 4000;
+
     tsc2005_reset(s);
 
     qemu_add_mouse_event_handler(tsc2005_touchscreen_event, s, 1,
@@ -558,7 +567,8 @@ void *tsc2005_init(qemu_irq pintdav)
  * from the touchscreen.  Assuming 12-bit precision was used during
  * tslib calibration.
  */
-void tsc2005_set_transform(void *opaque, MouseTransformInfo *info)
+void tsc2005_set_transform(void *opaque, MouseTransformInfo *info,
+                           int z1_cons, int z2_cons)
 {
     TSC2005State *s = (TSC2005State *) opaque;
 
@@ -590,4 +600,7 @@ void tsc2005_set_transform(void *opaque, MouseTransformInfo *info)
     s->tr[4] >>= 11;
     s->tr[5] >>= 11;
     s->tr[7] <<= 4;
+
+    s->z1_cons = z1_cons;
+    s->z2_cons = z2_cons;
 }
