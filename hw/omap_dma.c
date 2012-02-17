@@ -721,10 +721,17 @@ void omap_dma_reset(struct soc_dma_s *dma)
         s->ch[i].repeat = 0;
         s->ch[i].auto_init = 0;
         s->ch[i].link_enabled = 0;
-        if (s->model < omap_dma_4)
+        if (s->model < omap_dma_4) {
             s->ch[i].interrupts = 0x0003;
-        else
-            s->ch[i].interrupts = 0x0000;
+        } else {
+            if (cpu_is_omap3630(s->mpu)) {
+                s->ch[i].interrupts = 0x2600;
+            } else if (cpu_class_omap3(s->mpu)) {
+                s->ch[i].interrupts = 0x0600;
+            } else {
+                s->ch[i].interrupts = 0x0000;
+            }
+        }
         s->ch[i].status = 0;
         s->ch[i].cstatus = 0;
         s->ch[i].active = 0;
@@ -1586,6 +1593,9 @@ static void omap_dma_setcaps(struct omap_dma_s *s)
         s->caps[0] =
                 (1 << 19) |	/* Constant Fill Capability */
                 (1 << 18);	/* Transparent BLT Capability */
+        if (cpu_is_omap3630(s->mpu)) {
+            s->caps[0] |= (1 << 20); /* LINK_LIST_CPBLTY_TYPE123 */
+        }
         s->caps[1] =
                 (1 << 1);	/* 1-bit palettized capability (DMA 3.2 only) */
         s->caps[2] =
@@ -1616,6 +1626,15 @@ static void omap_dma_setcaps(struct omap_dma_s *s)
                 (1 << 2) |	/* HALF_FRAME_INTERRUPT_CPBLTY */
                 (1 << 1) |	/* EVENT_DROP_INTERRUPT_CPBLTY */
                 (1 << 0);	/* TIMEOUT_INTERRUPT_CPBLTY (DMA 3.2 only) */
+        if (cpu_is_omap3630(s->mpu)) {
+            s->caps[4] |= (1 << 14) | /* EOSB_INTERRUPT_CPBLTY */
+                          (1 << 13) | /* reserved */
+                          (1 << 12) | /* DRAIN_END_INTERRUPT_CPBLTY */
+                          (1 << 11) | /* MISALIGNED_ADRS_ERR_INTERRUPT_CPBLTY */
+                          (1 << 10) | /* SUPERVISOR_ERR_INTERRUPT_CPBLTY */
+                          (1 << 9)  | /* reserved */
+                          (1 << 8);   /* TRANS_ERR_INTERRUPT_CPBLTY */
+        }
         break;
     }
 }
@@ -1679,7 +1698,7 @@ static void omap_dma_interrupts_4_update(struct omap_dma_s *s)
     uint32_t bmp, bit;
 
     for (bmp = 0, bit = 1; bit; ch ++, bit <<= 1)
-        if (ch->status) {
+        if ((ch->status &= ch->interrupts)) {
             bmp |= bit;
             ch->cstatus |= ch->status;
             ch->status = 0;
@@ -1707,6 +1726,9 @@ static uint64_t omap_dma4_read(void *opaque, target_phys_addr_t addr,
 
     switch (addr) {
     case 0x00:	/* DMA4_REVISION */
+        if (cpu_is_omap3630(s->mpu)) {
+            return 0x50;
+        }
         return 0x40;
 
     case 0x14:	/* DMA4_IRQSTATUS_L3 */
@@ -1838,8 +1860,13 @@ static uint64_t omap_dma4_read(void *opaque, target_phys_addr_t addr,
         /* XXX only in sDMA */
         return ch->color;
 
+    case 0x50: /* DMA4_CDP */
+    case 0x54: /* DMA4_CNDP */
+    case 0x58: /* DMA4_CCDN */
+        return 0;
+
     default:
-        OMAP_BAD_REG(addr);
+        OMAP_BAD_REG(0x80 + chnum * 0x60 + addr);
         return 0;
     }
 }
@@ -1879,8 +1906,11 @@ static void omap_dma4_write(void *opaque, target_phys_addr_t addr,
         return;
 
     case 0x2c:	/* DMA4_OCP_SYSCONFIG */
-        if (value & 2)						/* SOFTRESET */
-            omap_dma_reset(s->dma);
+        if (value & 2) { /* SOFTRESET */
+            if (!cpu_is_omap3630(s->mpu)) { /* N/A on 3630GP */
+                omap_dma_reset(s->dma);
+            }
+        }
         s->ocp = value & 0x3321;
         if (((s->ocp >> 12) & 3) == 3)				/* MIDLEMODE */
             fprintf(stderr, "%s: invalid DMA power mode\n", __FUNCTION__);
@@ -1949,7 +1979,13 @@ static void omap_dma4_write(void *opaque, target_phys_addr_t addr,
         break;
 
     case 0x08:	/* DMA4_CICR */
-        ch->interrupts = value & 0x09be;
+        if (cpu_is_omap3630(s->mpu)) {
+            ch->interrupts = value & 0x5dbe;
+        } else if (cpu_class_omap3(s->mpu)) {
+            ch->interrupts = value & 0x1dbe;
+        } else {
+            ch->interrupts = value & 0x09be;
+        }
         break;
 
     case 0x0c:	/* DMA4_CSR */
@@ -1979,7 +2015,7 @@ static void omap_dma4_write(void *opaque, target_phys_addr_t addr,
             printf("%s: bad data_type for DMA channel\n", __FUNCTION__);
         break;
 
-    case 0x14:	/* DMA4_CEN */
+    case 0x14:	/* DMA4_CCEN */
         ch->set_update = 1;
         ch->elements = value & 0xffffff;
         break;
@@ -2028,11 +2064,32 @@ static void omap_dma4_write(void *opaque, target_phys_addr_t addr,
     case 0x38:	/* DMA4_CDAC */
     case 0x3c:	/* DMA4_CCEN */
     case 0x40:	/* DMA4_CCFN */
-        OMAP_RO_REG(addr);
+        /* f.ex. linux kernel writes zeroes to these registers as well
+           when performing a DMA channel reset. let's just ignore the
+           writes instead of reporting "dummy" errors */
+        /*OMAP_RO_REG(0x80 + chnum * 0x60 + addr);*/
+        break;
+
+    case 0x50: /* DMA4_CDP */
+        if (cpu_is_omap3630(s->mpu)) {
+            if ((value >> 8) & 3) { /* TRANSFER_MODE */
+                hw_error("%s: linked list transfer mode not supported",
+                         __FUNCTION__);
+            }
+        } else {
+            OMAP_BAD_REG(0x80 + chnum * 0x60 + addr);
+        }
+        break;
+
+    case 0x54: /* DMA4_CNDP */
+    case 0x58: /* DMA4_CCDN */
+        if (!cpu_is_omap3630(s->mpu)) {
+            OMAP_BAD_REG(0x80 + chnum * 0x60 + addr);
+        }
         break;
 
     default:
-        OMAP_BAD_REG(addr);
+        OMAP_BAD_REG(0x80 + chnum * 0x60 + addr);
     }
 }
 
@@ -2042,10 +2099,10 @@ static const MemoryRegionOps omap_dma4_ops = {
     .endianness = DEVICE_NATIVE_ENDIAN,
 };
 
-struct soc_dma_s *omap_dma4_init(target_phys_addr_t base, qemu_irq *irqs,
-                MemoryRegion *sysmem,
-                struct omap_mpu_state_s *mpu, int fifo,
-                int chans, omap_clk iclk, omap_clk fclk)
+static struct omap_dma_s *omap_dma4_init_internal(struct omap_mpu_state_s *mpu,
+                                                  qemu_irq *irqs,
+                                                  int chans, int drq_count,
+                                                  omap_clk iclk, omap_clk fclk)
 {
     int i;
     struct omap_dma_s *s = (struct omap_dma_s *)
@@ -2055,31 +2112,54 @@ struct soc_dma_s *omap_dma4_init(target_phys_addr_t base, qemu_irq *irqs,
     s->chans = chans;
     s->mpu = mpu;
     s->clk = fclk;
-
+    
     s->dma = soc_dma_init(s->chans);
     s->dma->freq = omap_clk_getrate(fclk);
     s->dma->transfer_fn = omap_dma_transfer_generic;
     s->dma->setup_fn = omap_dma_transfer_setup;
-    s->dma->drq = qemu_allocate_irqs(omap_dma_request, s, 64);
+    s->dma->drq = qemu_allocate_irqs(omap_dma_request, s, drq_count);
     s->dma->opaque = s;
     for (i = 0; i < s->chans; i ++) {
         s->ch[i].dma = &s->dma->ch[i];
         s->dma->ch[i].opaque = &s->ch[i];
     }
-
+    
     memcpy(&s->irq, irqs, sizeof(s->irq));
     s->intr_update = omap_dma_interrupts_4_update;
-
+    
     omap_dma_setcaps(s);
     omap_clk_adduser(s->clk, qemu_allocate_irqs(omap_dma_clk_update, s, 1)[0]);
     omap_dma_reset(s->dma);
     omap_dma_clk_update(s, 0, !!s->dma->freq);
 
+    mpu->drq = s->dma->drq;
+
+    return s;
+}
+
+struct soc_dma_s *omap_dma4_init(target_phys_addr_t base, qemu_irq *irqs,
+                MemoryRegion *sysmem,
+                struct omap_mpu_state_s *mpu, int fifo,
+                int chans, omap_clk iclk, omap_clk fclk)
+{
+    struct omap_dma_s *s = omap_dma4_init_internal(mpu, irqs, chans, 64,
+                                                   iclk, fclk);
     memory_region_init_io(&s->iomem, &omap_dma4_ops, s, "omap.dma4", 0x1000);
     memory_region_add_subregion(sysmem, base, &s->iomem);
 
-    mpu->drq = s->dma->drq;
+    return s->dma;
+}
 
+struct soc_dma_s *omap3_dma4_init(struct omap_target_agent_s *ta,
+                                  struct omap_mpu_state_s *mpu,
+                                  qemu_irq *irqs,
+                                  int chans,
+                                  omap_clk iclk, omap_clk fclk)
+{
+    struct omap_dma_s *s = omap_dma4_init_internal(mpu, irqs, chans, 96,
+                                                   iclk, fclk);
+    memory_region_init_io(&s->iomem, &omap_dma4_ops, s, "omap.dma4", 0x1000);
+    omap_l4_attach(ta, 0, &s->iomem);
     return s->dma;
 }
 
