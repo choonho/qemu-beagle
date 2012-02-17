@@ -1126,6 +1126,8 @@ struct omap_mpu_state_s {
     struct omap_dss_s *dss;
 
     struct omap_eac_s *eac;
+    MemoryRegion bootrom;
+    int bootrom_initialized;
 };
 
 /* omap1.c */
@@ -1137,6 +1139,10 @@ struct omap_mpu_state_s *omap310_mpu_init(MemoryRegion *system_memory,
 struct omap_mpu_state_s *omap2420_mpu_init(MemoryRegion *sysmem,
                 unsigned long sdram_size,
                 const char *core);
+
+/* omap3_boot.c */
+void omap3_boot_rom_init(struct omap_mpu_state_s *s);
+void omap3_boot_rom_emu(struct omap_mpu_state_s *s);
 
 # if TARGET_PHYS_ADDR_BITS == 32
 #  define OMAP_FMT_plx "%#08x"
