@@ -2162,8 +2162,9 @@ uint32_t HELPER(get_cp15)(CPUState *env, uint32_t insn)
         if (crm == 4 && op1 == 0 && op2 == 0) {
             return env->cp15.c7_par;
         }
-        /* FIXME: Should only clear Z flag if destination is r15.  */
-        env->ZF = 0;
+        /* FIXME this is still totally in the wrong place! */
+        if (((insn >> 12) & 0xf) == 0xf) /* clear ZF only if destination is r15 */
+            env->ZF = 0;
         return 0;
     case 8: /* MMU TLB control.  */
         goto bad_reg;
