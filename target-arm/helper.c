@@ -1703,6 +1703,7 @@ uint32_t HELPER(get_cp15)(CPUARMState *env, uint32_t insn)
             case ARM_CPUID_ARM11MPCORE:
                 return 1;
             case ARM_CPUID_CORTEXA8:
+            case ARM_CPUID_CORTEXA8_R2:
                 return 2;
             case ARM_CPUID_CORTEXA9:
             case ARM_CPUID_CORTEXA15:
