@@ -75,6 +75,12 @@ struct omap_gp_timer_s {
 #define GPT_OVF_IT	(1 << 1)
 #define GPT_MAT_IT	(1 << 0)
 
+/*if the clock source of gptimer changes, rate must be regenerated*/
+void omap_gp_timer_change_clk(struct omap_gp_timer_s *timer)
+{
+    timer->rate = omap_clk_getrate(timer->clk);
+}
+
 static inline void omap_gp_timer_intr(struct omap_gp_timer_s *timer, int it)
 {
     if (timer->it_ena & it) {
