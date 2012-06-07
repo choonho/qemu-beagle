@@ -1119,11 +1119,54 @@ void HELPER(set_cp15)(CPUARMState *env, uint32_t insn, uint32_t val)
         }
         goto bad_reg;
     case 1: /* System configuration.  */
-        if (arm_feature(env, ARM_FEATURE_V7)
-                && op1 == 0 && crm == 1 && op2 == 0) {
-            env->cp15.c1_scr = val;
-            break;
+        if (arm_feature(env, ARM_FEATURE_V6)) {
+            /* In v5 only crm=0 was used, so implementations may have been
+             * sloppy about decoding that field. So only check the crm!=0
+             * cases for V6 and above.
+             */
+            if (op1 != 0) {
+                goto bad_reg;
+            }
+            switch (crm) {
+            case 0:
+                /* crm == 0 case is handled below */
+                break;
+            case 1:
+                if (!arm_feature(env, ARM_FEATURE_TRUSTZONE)
+                    || (env->uncached_cpsr & CPSR_M) == ARM_CPU_MODE_USR) {
+                    /* XXX handling userspace accesses by aborting? */
+                    goto bad_reg;
+                }
+                switch (op2) {
+                case 0: /* Secure configuration register. */
+                    if (env->cp15.c1_scr & 1) {
+                        goto bad_reg;
+                    }
+                    env->cp15.c1_scr = val;
+                    break;
+                case 1: /* Secure debug enable register. */
+                    if (env->cp15.c1_scr & 1) {
+                        goto bad_reg;
+                    }
+                    env->cp15.c1_sedbg = val;
+                    break;
+                case 2: /* Nonsecure access control register. */
+                    if (env->cp15.c1_scr & 1) {
+                        goto bad_reg;
+                    }
+                    env->cp15.c1_nseac = val;
+                    break;
+                default:
+                    goto bad_reg;
+                }
+                break;
+            default:
+                goto bad_reg;
+            }
         }
+
+        /* crm == 0 (and legacy underdecoded variants) */
+
         if (arm_feature(env, ARM_FEATURE_OMAPCP))
             op2 = 0;
         switch (op2) {
@@ -1595,10 +1638,51 @@ uint32_t HELPER(get_cp15)(CPUARMState *env, uint32_t insn)
             goto bad_reg;
         }
     case 1: /* System configuration.  */
-        if (arm_feature(env, ARM_FEATURE_V7)
-            && op1 == 0 && crm == 1 && op2 == 0) {
-            return env->cp15.c1_scr;
+        if (arm_feature(env, ARM_FEATURE_V6)) {
+            /* In v5 only crm=0 was used, so implementations may have been
+             * sloppy about decoding that field. So only check the crm!=0
+             * cases for V6 and above.
+             */
+            if (op1 != 0) {
+                goto bad_reg;
+            }
+            switch (crm) {
+            case 0:
+                /* crm == 0 case is handled below */
+                break;
+            case 1:
+                if (!arm_feature(env, ARM_FEATURE_TRUSTZONE)
+                    || (env->uncached_cpsr & CPSR_M) == ARM_CPU_MODE_USR) {
+                    /* XXX handling userspace accesses by aborting? */
+                    goto bad_reg;
+                }
+                switch (op2) {
+                case 0: /* Secure configuration register. */
+                    if (env->cp15.c1_scr & 1) {
+                        goto bad_reg;
+                    }
+                    return env->cp15.c1_scr;
+                    break;
+                case 1: /* Secure debug enable register. */
+                    if (env->cp15.c1_scr & 1) {
+                        goto bad_reg;
+                    }
+                    return env->cp15.c1_sedbg;
+                    break;
+                case 2: /* Nonsecure access control register. */
+                    return env->cp15.c1_nseac;
+                    break;
+                default:
+                    goto bad_reg;
+                }
+                break;
+            default:
+                goto bad_reg;
+            }
         }
+
+        /* crm == 0 (and legacy underdecoded variants) */
+
         if (arm_feature(env, ARM_FEATURE_OMAPCP))
             op2 = 0;
         switch (op2) {
@@ -1820,6 +1904,18 @@ uint32_t HELPER(get_cp15)(CPUARMState *env, uint32_t insn)
         return 0;
     case 11: /* TCM DMA control.  */
     case 12: /* Reserved.  */
+        if (!op1) {
+            switch (crm) {
+            case 0: /* secure or nonsecure vector base address */
+                if (arm_feature(env, ARM_FEATURE_TRUSTZONE)) {
+                    /* FIXME: implement true vector base addressing */
+                    return 0; /* reset value according to ARM Cortex-A8 TRM */
+                }
+                break;
+            default:
+                break;
+            }
+        }
         goto bad_reg;
     case 13: /* Process ID.  */
         switch (op2) {

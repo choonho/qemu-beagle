@@ -277,6 +277,7 @@ static void arm1176_initfn(Object *obj)
     set_feature(&cpu->env, ARM_FEATURE_V6K);
     set_feature(&cpu->env, ARM_FEATURE_VFP);
     set_feature(&cpu->env, ARM_FEATURE_VAPA);
+    set_feature(&cpu->env, ARM_FEATURE_TRUSTZONE);
     cpu->midr = ARM_CPUID_ARM1176;
     cpu->reset_fpsid = 0x410120b5;
     cpu->mvfr0 = 0x11111111;
@@ -337,6 +338,7 @@ static void cortex_a8_initfn(Object *obj)
     set_feature(&cpu->env, ARM_FEATURE_VFP3);
     set_feature(&cpu->env, ARM_FEATURE_NEON);
     set_feature(&cpu->env, ARM_FEATURE_THUMB2EE);
+    set_feature(&cpu->env, ARM_FEATURE_TRUSTZONE);
     cpu->midr = ARM_CPUID_CORTEXA8;
     cpu->reset_fpsid = 0x410330c0;
     cpu->mvfr0 = 0x11110222;
@@ -375,6 +377,7 @@ static void cortex_a9_initfn(Object *obj)
      * and valid configurations; we don't model A9UP).
      */
     set_feature(&cpu->env, ARM_FEATURE_V7MP);
+    set_feature(&cpu->env, ARM_FEATURE_TRUSTZONE);
     cpu->midr = ARM_CPUID_CORTEXA9;
     cpu->reset_fpsid = 0x41033090;
     cpu->mvfr0 = 0x11110222;
@@ -410,6 +413,7 @@ static void cortex_a15_initfn(Object *obj)
     set_feature(&cpu->env, ARM_FEATURE_ARM_DIV);
     set_feature(&cpu->env, ARM_FEATURE_V7MP);
     set_feature(&cpu->env, ARM_FEATURE_GENERIC_TIMER);
+    set_feature(&cpu->env, ARM_FEATURE_TRUSTZONE);
     cpu->midr = ARM_CPUID_CORTEXA15;
     cpu->reset_fpsid = 0x410430f0;
     cpu->mvfr0 = 0x10110222;
