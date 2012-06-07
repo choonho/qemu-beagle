@@ -310,6 +310,7 @@ ifneq ($(HELPERS-y),)
 endif
 ifneq ($(BLOBS),)
 	set -e; for x in $(BLOBS); do \
+		[ -e "$(SRC_PATH)/pc-bios/$$x" ] || continue; \
 		$(INSTALL_DATA) $(SRC_PATH)/pc-bios/$$x "$(DESTDIR)$(qemu_datadir)"; \
 	done
 endif
