@@ -61,9 +61,11 @@
 
 
 typedef void ARMWriteCPFunc(void *opaque, int cp_info,
-                            int srcreg, int operand, uint32_t value);
+                            int srcreg, int operand, uint32_t value,
+                            uintptr_t retaddr);
 typedef uint32_t ARMReadCPFunc(void *opaque, int cp_info,
-                               int dstreg, int operand);
+                               int dstreg, int operand,
+                               uintptr_t retaddr);
 
 struct arm_boot_info;
 
