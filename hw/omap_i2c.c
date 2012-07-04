@@ -196,7 +196,10 @@ static uint32_t omap_i2c_read(void *opaque, target_phys_addr_t addr)
         return s->mask;
 
     case 0x08:	/* I2C_STAT */
-        return s->stat | (i2c_bus_busy(s->bus) << 12);
+        ret = s->stat | (i2c_bus_busy(s->bus) << 12 );
+        if (s->revision >= OMAP3_INTR_REV && (s->stat & 0x4010)) /* XRDY or XDR  */
+            s->stat |= 1 << 10; /* XUDF as required by errata 1.153 */
+        return ret;
 
     case 0x0c: /* I2C_IV / I2C_WE */
         if (s->revision >= OMAP3_INTR_REV)
