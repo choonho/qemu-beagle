@@ -448,7 +448,7 @@ static const BlockDevOps sd_block_ops = {
    whether card should be in SSI or MMC/SD mode.  It is also up to the
    board to ensure that ssi transfers only occur when the chip select
    is asserted.  */
-SDState *sd_init(BlockDriverState *bs, bool is_spi)
+SDState *sd_init(BlockDriverState *bs, bool is_spi, bool is_mmc)
 {
     SDState *sd;
 
