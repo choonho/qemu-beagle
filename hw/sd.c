@@ -393,13 +393,13 @@ static inline uint64_t sd_addr_to_wpnum(uint64_t addr)
     return addr >> (HWBLOCK_SHIFT + SECTOR_SHIFT + WPGROUP_SHIFT);
 }
 
-static void sd_reset(SDState *sd, BlockDriverState *bdrv)
+void sd_reset(SDState *sd)
 {
     uint64_t size;
     uint64_t sect;
 
-    if (bdrv) {
-        bdrv_get_geometry(bdrv, &sect);
+    if (sd->bdrv) {
+        bdrv_get_geometry(sd->bdrv, &sect);
     } else {
         sect = 0;
     }
@@ -416,11 +416,9 @@ static void sd_reset(SDState *sd, BlockDriverState *bdrv)
     sd_set_cardstatus(sd);
     sd_set_sdstatus(sd);
 
-    sd->bdrv = bdrv;
-
     if (sd->wp_groups)
         g_free(sd->wp_groups);
-    sd->wp_switch = bdrv ? bdrv_is_read_only(bdrv) : false;
+    sd->wp_switch = sd->bdrv ? bdrv_is_read_only(sd->bdrv) : false;
     sd->wp_groups = bitmap_new(sect);
     memset(sd->function_group, 0, sizeof(int) * 6);
     sd->erase_start = 0;
@@ -437,7 +435,7 @@ static void sd_cardchange(void *opaque, bool load)
 
     qemu_set_irq(sd->inserted_cb, bdrv_is_inserted(sd->bdrv));
     if (bdrv_is_inserted(sd->bdrv)) {
-        sd_reset(sd, sd->bdrv);
+        sd_reset(sd);
         qemu_set_irq(sd->readonly_cb, sd->wp_switch);
     }
 }
@@ -458,7 +456,8 @@ SDState *sd_init(BlockDriverState *bs, bool is_spi)
     sd->buf = qemu_blockalign(bs, 512);
     sd->spi = is_spi;
     sd->enable = true;
-    sd_reset(sd, bs);
+    sd->bdrv = bs;
+    sd_reset(sd);
     if (sd->bdrv) {
         bdrv_attach_dev_nofail(sd->bdrv, sd);
         bdrv_set_dev_ops(sd->bdrv, &sd_block_ops, sd);
@@ -636,7 +635,7 @@ static sd_rsp_type_t sd_normal_command(SDState *sd,
 
         default:
             sd->state = sd_idle_state;
-            sd_reset(sd, sd->bdrv);
+            sd_reset(sd);
             return sd->spi ? sd_r1 : sd_r0;
         }
         break;
