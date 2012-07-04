@@ -38,6 +38,9 @@ static inline bool serial_isa_init(ISABus *bus, int index,
 }
 
 void serial_set_frequency(SerialState *s, uint32_t frequency);
+void serial_change_char_driver(SerialState *s, CharDriverState *chr);
+const MemoryRegionOps *serial_get_memops(enum device_endian end);
+qemu_irq *serial_get_irq(SerialState *s);
 
 /* parallel.c */
 static inline bool parallel_init(ISABus *bus, int index, CharDriverState *chr)
