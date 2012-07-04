@@ -383,7 +383,7 @@ void hid_free(HIDState *hs)
 {
     switch (hs->kind) {
     case HID_KEYBOARD:
-        qemu_remove_kbd_event_handler();
+        qemu_remove_kbd_event_handler(hid_keyboard_event, hs);
         break;
     case HID_MOUSE:
     case HID_TABLET:
