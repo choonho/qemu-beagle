@@ -2,6 +2,7 @@
  * TI OMAP on-chip I2C controller.  Only "new I2C" mode supported.
  *
  * Copyright (C) 2007 Andrzej Zaborowski  <balrog@zabor.org>
+ * Copyright (C) 2009 Nokia Corporation
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as
@@ -36,15 +37,19 @@ typedef struct OMAPI2CState {
     void *iclk;
     void *fclk;
 
-    uint8_t mask;
+    uint16_t mask;
     uint16_t stat;
+    uint16_t we;
     uint16_t dma;
     uint16_t count;
     int count_cur;
+    uint16_t sysc;
     uint16_t control;
-    uint16_t addr[2];
+    uint16_t own_addr[4];
+    uint16_t slave_addr;
+    uint8_t sblock;
     uint8_t divider;
-    uint8_t times[2];
+    uint16_t times[2];
     uint16_t test;
     int fifostart;
     int fifolen;
@@ -158,15 +163,23 @@ static void omap_i2c_reset(DeviceState *dev)
     s->dma = 0;
     s->count = 0;
     s->count_cur = 0;
+    s->we = 0;
+    s->sysc = 0;
     s->fifolen = 0;
     s->fifostart = 0;
     s->control = 0;
-    s->addr[0] = 0;
-    s->addr[1] = 0;
+    s->own_addr[0] = 0;
+    s->own_addr[1] = 0;
+    s->own_addr[2] = 0;
+    s->own_addr[3] = 0;
+    s->slave_addr = 0;
+    s->sblock = 0;
     s->divider = 0;
     s->times[0] = 0;
     s->times[1] = 0;
     s->test = 0;
+    
+    i2c_end_transfer(s->bus);
 }
 
 static uint32_t omap_i2c_read(void *opaque, target_phys_addr_t addr)
@@ -185,7 +198,9 @@ static uint32_t omap_i2c_read(void *opaque, target_phys_addr_t addr)
     case 0x08:	/* I2C_STAT */
         return s->stat | (i2c_bus_busy(s->bus) << 12);
 
-    case 0x0c:	/* I2C_IV */
+    case 0x0c: /* I2C_IV / I2C_WE */
+        if (s->revision >= OMAP3_INTR_REV)
+            return s->we;
         if (s->revision >= OMAP2_INTR_REV)
             break;
         ret = ffs(s->stat & s->mask);
@@ -245,16 +260,16 @@ static uint32_t omap_i2c_read(void *opaque, target_phys_addr_t addr)
         return ret;
 
     case 0x20:	/* I2C_SYSC */
-        return 0;
+        return s->sysc;
 
     case 0x24:	/* I2C_CON */
         return s->control;
 
-    case 0x28:	/* I2C_OA */
-        return s->addr[0];
+    case 0x28: /* I2C_OA / I2C_OA0 */
+        return s->own_addr[0];
 
     case 0x2c:	/* I2C_SA */
-        return s->addr[1];
+        return s->slave_addr;
 
     case 0x30:	/* I2C_PSC */
         return s->divider;
@@ -269,8 +284,38 @@ static uint32_t omap_i2c_read(void *opaque, target_phys_addr_t addr)
         if (s->test & (1 << 15)) {				/* ST_EN */
             s->test ^= 0xa;
             return s->test;
-        } else
-            return s->test & ~0x300f;
+        }
+        return s->test & ~0x300f;
+    case 0x40: /* I2C_BUFSTAT */
+        if (s->revision >= OMAP3_INTR_REV) {
+            switch (s->fifosize) {
+            case 8:  ret = 0x0000; break;
+            case 16: ret = 0x4000; break;
+            case 32: ret = 0x8000; break;
+            case 64: ret = 0xc000; break;
+            default: ret = 0x0000; break;
+            }
+            ret |= ((s->fifolen) & 0x3f) << 8;  /* RXSTAT */
+            ret |= (s->count_cur) & 0x3f;       /* TXSTAT */
+            return ret;
+        }
+        break;
+    case 0x44: /* I2C_OA1 */
+    case 0x48: /* I2C_OA2 */
+    case 0x4c: /* I2C_OA3 */
+        if (s->revision >= OMAP3_INTR_REV)
+            return s->own_addr[(addr >> 2) & 3];
+        break;
+    case 0x50: /* I2C_ACTOA */
+        if (s->revision >= OMAP3_INTR_REV)
+            return 0; /* TODO: determine accessed slave own address */
+        break;
+    case 0x54: /* I2C_SBLOCK */
+        if (s->revision >= OMAP3_INTR_REV)
+            return s->sblock;
+        break;
+    default:
+        break;
     }
 
     OMAP_BAD_REG(addr);
@@ -286,28 +331,44 @@ static void omap_i2c_write(void *opaque, target_phys_addr_t addr,
 
     switch (offset) {
     case 0x00:	/* I2C_REV */
-    case 0x0c:	/* I2C_IV */
     case 0x10:	/* I2C_SYSS */
+    case 0x40: /* I2C_BUFSTAT */
+    case 0x50: /* I2C_ACTOA */
         OMAP_RO_REG(addr);
-        return;
-
+        break;
     case 0x04:	/* I2C_IE */
-        s->mask = value & (s->revision < OMAP2_INTR_REV ? 0x1f : 0x3f);
+        if (s->revision >= OMAP3_INTR_REV)
+            s->mask = value & 0x63ff;
+        else
+            s->mask = value & (s->revision < OMAP2_INTR_REV ? 0x1f : 0x3f);
+        omap_i2c_interrupts_update(s);
+        break;
+    case 0x08:	/* I2C_STAT */
+        if (s->revision < OMAP2_INTR_REV)
+            OMAP_RO_REG(addr);
+        else {
+            /* RRDY and XRDY are reset by hardware. (in all versions???) */
+            s->stat &= ~(value & (s->revision < OMAP3_INTR_REV ? 0x27 : 0x63e7));
+            omap_i2c_interrupts_update(s);
+        }
         break;
 
-    case 0x08:	/* I2C_STAT */
-        if (s->revision < OMAP2_INTR_REV) {
+    case 0x0c: /* I2C_IV / I2C_WE */
+        if (s->revision < OMAP3_INTR_REV)
             OMAP_RO_REG(addr);
-            return;
-        }
-
-        /* RRDY and XRDY are reset by hardware. (in all versions???) */
-        s->stat &= ~(value & 0x27);
-        omap_i2c_interrupts_update(s);
+        else
+            s->we = value & 0x636f;
         break;
 
     case 0x14:	/* I2C_BUF */
-        s->dma = value & 0x8080;
+        if (s->revision < OMAP3_INTR_REV)
+            s->dma = value & 0x8080;
+        else {
+            s->dma = value & 0xbfbf;
+            if ((value & (1 << 14))    /* RXFIFO_CLR */
+                || (value & (1 << 6))) /* TXFIFO_CLR */
+                s->fifolen = 0;
+        }
         if (value & (1 << 15))					/* RDMA_EN */
             s->mask &= ~(1 << 3);				/* RRDY_IE */
         if (value & (1 << 7))					/* XDMA_EN */
@@ -351,23 +412,31 @@ static void omap_i2c_write(void *opaque, target_phys_addr_t addr,
     case 0x20:	/* I2C_SYSC */
         if (s->revision < OMAP2_INTR_REV) {
             OMAP_BAD_REG(addr);
-            return;
+            break;
         }
 
         if (value & 2)
             omap_i2c_reset(&s->busdev.qdev);
+        else if (s->revision >= OMAP3_INTR_REV)
+            s->sysc = value & 0x031d;
         break;
 
     case 0x24:	/* I2C_CON */
-        s->control = value & 0xcf87;
+        s->control = value & (s->revision < OMAP3_INTR_REV ? 0xcf87 : 0xbff3);
         if (~value & (1 << 15)) {				/* I2C_EN */
             if (s->revision < OMAP2_INTR_REV)
                 omap_i2c_reset(&s->busdev.qdev);
             break;
         }
+        if (s->revision >= OMAP3_INTR_REV && ((value >> 12) & 3) > 1) { /* OPMODE */
+            fprintf(stderr,
+                    "%s: only FS and HS modes are supported\n",
+                    __FUNCTION__);
+            break;
+        }
         if ((value & (1 << 10))) { /* MST */
             if (value & 1) { /* STT */
-                nack = !!i2c_start_transfer(s->bus, s->addr[1], /*SA*/
+                nack = !!i2c_start_transfer(s->bus, s->slave_addr, /*SA*/
                                             (~value >> 9) & 1);			/* TRX */
                 s->stat |= nack << 1;				/* NACK */
                 s->control &= ~(1 << 0);				/* STT */
@@ -386,13 +455,17 @@ static void omap_i2c_write(void *opaque, target_phys_addr_t addr,
             }
         }
         break;
-
-    case 0x28:	/* I2C_OA */
-        s->addr[0] = value & 0x3ff;
+    case 0x28: /* I2C_OA / I2C_OA0 */
+        s->own_addr[0] = value & (s->revision < OMAP3_INTR_REV
+                                  ? 0x3ff : 0xe3ff);
+        /*i2c_set_slave_address(&s->slave[0],
+          value & (s->revision >= OMAP3_INTR_REV
+          && (s->control & 0x80)
+          ? 0x3ff: 0x7f));*/
         break;
 
     case 0x2c:	/* I2C_SA */
-        s->addr[1] = value & 0x3ff;
+        s->slave_addr = value & 0x3ff;
         break;
 
     case 0x30:	/* I2C_PSC */
@@ -400,27 +473,53 @@ static void omap_i2c_write(void *opaque, target_phys_addr_t addr,
         break;
 
     case 0x34:	/* I2C_SCLL */
-        s->times[0] = value;
+        s->times[0] = value & (s->revision < OMAP3_INTR_REV ? 0xff : 0xffff);
         break;
 
     case 0x38:	/* I2C_SCLH */
-        s->times[1] = value;
+        s->times[1] = value & (s->revision < OMAP3_INTR_REV ? 0xff : 0xffff);
         break;
 
     case 0x3c:	/* I2C_SYSTEST */
-        s->test = value & 0xf80f;
+        value &= s->revision < OMAP3_INTR_REV ? 0xf805 : 0xf815;
+        if ((value & (1 << 15))) { /* ST_EN */
+            fprintf(stderr, "%s: System Test not supported\n",
+                    __FUNCTION__);
+            s->test = (s->test & 0x0a) | value;
+        } else
+            s->test = (s->test & 0x1f) | (value & 0xf800);
         if (value & (1 << 11))					/* SBB */
             if (s->revision >= OMAP2_INTR_REV) {
                 s->stat |= 0x3f;
+                if (s->revision >= OMAP3_INTR_REV)
+                    s->stat |= 0x600;
                 omap_i2c_interrupts_update(s);
             }
-        if (value & (1 << 15))					/* ST_EN */
-            fprintf(stderr, "%s: System Test not supported\n", __FUNCTION__);
         break;
 
+    case 0x44: /* I2C_OA1 */
+    case 0x48: /* I2C_OA2 */
+    case 0x4c: /* I2C_OA3 */
+        if (s->revision < OMAP3_INTR_REV)
+            OMAP_BAD_REG(addr);
+        else {
+            addr = (addr >> 2) & 3;
+            s->own_addr[addr] = value & 0x3ff;
+            /*i2c_set_slave_address(&s->slave[addr],
+              value & ((s->control & (0x80 >> addr))
+              ? 0x3ff: 0x7f));*/
+        }
+        break;
+    case 0x54: /* I2C_SBLOCK */
+        if (s->revision < OMAP3_INTR_REV)
+            OMAP_BAD_REG(addr);
+        else {
+            s->sblock = value & 0x0f;
+        }
+        break;
     default:
         OMAP_BAD_REG(addr);
-        return;
+            break;
     }
 }
 
