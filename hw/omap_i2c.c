@@ -568,6 +568,40 @@ static const MemoryRegionOps omap_i2c_ops = {
     .endianness = DEVICE_NATIVE_ENDIAN,
 };
 
+static int omap_i2c_bus_post_load(void *opaque, int version_id)
+{
+    OMAPI2CState *s = opaque;
+    omap_i2c_interrupts_update(s);
+    return 0;
+}
+
+static const VMStateDescription vmstate_omap_i2c = {
+    .name = "omap_i2c",
+    .version_id = 1,
+    .minimum_version_id = 1,
+    .post_load = omap_i2c_bus_post_load,
+    .fields = (VMStateField[]) {
+        VMSTATE_UINT16(mask, OMAPI2CState),
+        VMSTATE_UINT16(stat, OMAPI2CState),
+        VMSTATE_UINT16(we, OMAPI2CState),
+        VMSTATE_UINT16(dma, OMAPI2CState),
+        VMSTATE_UINT16(count, OMAPI2CState),
+        VMSTATE_INT32(count_cur, OMAPI2CState),
+        VMSTATE_UINT16(sysc, OMAPI2CState),
+        VMSTATE_UINT16(control, OMAPI2CState),
+        VMSTATE_UINT16_ARRAY(own_addr, OMAPI2CState, 4),
+        VMSTATE_UINT16(slave_addr, OMAPI2CState),
+        VMSTATE_UINT8(sblock, OMAPI2CState),
+        VMSTATE_UINT8(divider, OMAPI2CState),
+        VMSTATE_UINT16_ARRAY(times, OMAPI2CState, 2),
+        VMSTATE_UINT16(test, OMAPI2CState),
+        VMSTATE_INT32(fifostart, OMAPI2CState),
+        VMSTATE_INT32(fifolen, OMAPI2CState),
+        VMSTATE_UINT8_ARRAY(fifo, OMAPI2CState, I2C_MAX_FIFO_SIZE),
+        VMSTATE_END_OF_LIST()
+    }
+};
+
 static int omap_i2c_init(SysBusDevice *dev)
 {
     OMAPI2CState *s = FROM_SYSBUS(OMAPI2CState, dev);
@@ -604,6 +638,7 @@ static void omap_i2c_class_init(ObjectClass *klass, void *data)
     k->init = omap_i2c_init;
     dc->props = omap_i2c_properties;
     dc->reset = omap_i2c_reset;
+    dc->vmsd = &vmstate_omap_i2c;
 }
 
 static TypeInfo omap_i2c_info = {
