@@ -26,6 +26,8 @@ void cpu_save(QEMUFile *f, void *opaque)
     qemu_put_be32(f, env->cp15.c1_coproc);
     qemu_put_be32(f, env->cp15.c1_xscaleauxcr);
     qemu_put_be32(f, env->cp15.c1_scr);
+    qemu_put_be32(f, env->cp15.c1_sedbg);
+    qemu_put_be32(f, env->cp15.c1_nseac);
     qemu_put_be32(f, env->cp15.c2_base0);
     qemu_put_be32(f, env->cp15.c2_base0_hi);
     qemu_put_be32(f, env->cp15.c2_base1);
@@ -146,6 +148,8 @@ int cpu_load(QEMUFile *f, void *opaque, int version_id)
     env->cp15.c1_coproc = qemu_get_be32(f);
     env->cp15.c1_xscaleauxcr = qemu_get_be32(f);
     env->cp15.c1_scr = qemu_get_be32(f);
+    env->cp15.c1_sedbg = qemu_get_be32(f);
+    env->cp15.c1_nseac = qemu_get_be32(f);
     env->cp15.c2_base0 = qemu_get_be32(f);
     env->cp15.c2_base0_hi = qemu_get_be32(f);
     env->cp15.c2_base1 = qemu_get_be32(f);
