@@ -28,6 +28,9 @@
 # define NAND_CMD_READ1		0x01
 # define NAND_CMD_READ2		0x50
 # define NAND_CMD_LPREAD2	0x30
+# define NAND_CMD_READCACHESTART 0x31
+# define NAND_CMD_READCACHEEXIT  0x34
+# define NAND_CMD_READCACHELAST  0x3f
 # define NAND_CMD_NOSERIALREAD2	0x35
 # define NAND_CMD_RANDOMREAD1	0x05
 # define NAND_CMD_RANDOMREAD2	0xe0
@@ -46,7 +49,7 @@
 # define NAND_IOSTATUS_PLANE1	(1 << 2)
 # define NAND_IOSTATUS_PLANE2	(1 << 3)
 # define NAND_IOSTATUS_PLANE3	(1 << 4)
-# define NAND_IOSTATUS_READY    (1 << 6)
+# define NAND_IOSTATUS_READY    (3 << 5)
 # define NAND_IOSTATUS_UNPROTCT	(1 << 7)
 
 # define MAX_PAGE		0x800
@@ -247,6 +250,7 @@ static void nand_command(NANDFlashState *s)
     unsigned int offset;
     switch (s->cmd) {
     case NAND_CMD_READ0:
+    case NAND_CMD_READCACHEEXIT:
         s->iolen = 0;
         break;
 
@@ -481,7 +485,10 @@ void nand_setio(DeviceState *dev, uint32_t value)
     NANDFlashState *s = (NANDFlashState *) dev;
     if (!s->ce && s->cle) {
         if (nand_flash_ids[s->chip_id].options & NAND_SAMSUNG_LP) {
-            if (s->cmd == NAND_CMD_READ0 && value == NAND_CMD_LPREAD2)
+            if (s->cmd == NAND_CMD_READ0
+                && (value == NAND_CMD_LPREAD2
+                    || value == NAND_CMD_READCACHESTART
+                    || value == NAND_CMD_READCACHELAST))
                 return;
             if (value == NAND_CMD_RANDOMREAD1) {
                 s->addr &= ~((1 << s->addr_shift) - 1);
@@ -508,7 +515,8 @@ void nand_setio(DeviceState *dev, uint32_t value)
                 s->cmd == NAND_CMD_BLOCKERASE2 ||
                 s->cmd == NAND_CMD_NOSERIALREAD2 ||
                 s->cmd == NAND_CMD_RANDOMREAD2 ||
-                s->cmd == NAND_CMD_RESET)
+                s->cmd == NAND_CMD_RESET ||
+            s->cmd == NAND_CMD_READCACHEEXIT)
             nand_command(s);
 
         if (s->cmd != NAND_CMD_RANDOMREAD2) {
