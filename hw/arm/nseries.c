@@ -427,6 +427,11 @@ struct mipid_s {
     int onoff;
     int gamma;
     uint32_t id;
+    
+    uint8_t n900;
+    int cabc;
+    int brightness;
+    int ctrl;
 };
 
 static void mipid_reset(DeviceState *qdev)
@@ -456,6 +461,11 @@ static uint32_t mipid_txrx(SPIDevice *spidev, uint32_t cmd, int len)
 {
     struct mipid_s *s = FROM_SPI_DEVICE(struct mipid_s, spidev);
     uint8_t ret;
+
+    if (s->n900 && len == 10) {
+        cmd >>= 1;
+        len--;
+    }
 
     if (len > 9) {
         hw_error("%s: FIXME: bad SPI word width %i\n", __FUNCTION__, len);
@@ -625,12 +635,78 @@ static uint32_t mipid_txrx(SPIDevice *spidev, uint32_t cmd, int len)
 
     case 0x38:	/* IDMOFF */
     case 0x39:	/* IDMON */
-    case 0x3a:	/* COLMOD */
         goto bad_cmd;
-
+    case 0x3a:	/* COLMOD */
+        if (!s->pm) {
+            /* ??? COLMOD not implemented? */
+        } else if (s->pm < 0) {
+            s->pm = 1;
+        }
+        break;
+    
+    case 0x51: /* WRITE_BRIGHTNESS */
+        if (s->n900) {
+            if (!s->pm) {
+                s->brightness = s->param[0] & 0xff;
+            } else if (s->pm < 0) {
+                s->pm = 1;
+            }
+        } else {
+            goto bad_cmd;
+        }
+        break;
+    case 0x52: /* READ_BRIGHTNESS */
+        if (s->n900) {
+            s->p = 0;
+            s->resp[0] = s->brightness;
+        } else {
+            goto bad_cmd;
+        }
+        break;
+    case 0x53: /* WRITE_CTRL */
+        if (s->n900) {
+            if (!s->pm) {
+                s->ctrl = s->param[0] & 0xff;
+            } else if (s->pm < 0) {
+                s->pm = 1;
+            }
+        } else {
+            goto bad_cmd;
+        }
+        break;
+    case 0x54: /* READ_CTRL */
+        if (s->n900) {
+            s->p = 0;
+            s->resp[0] = s->ctrl;
+        } else {
+            goto bad_cmd;
+        }
+        break;
+    case 0x55: /* WRITE_CABC */
+        if (s->n900) {
+            if (!s->pm) {
+                s->cabc = s->param[0] & 0xff;
+            } else if (s->pm < 0) {
+                s->pm = 1;
+            }
+        } else {
+            goto bad_cmd;
+        }
+        break;
+    case 0x56: /* READ_CABC */
+        if (s->n900) {
+            s->p = 0;
+            s->resp[0] = s->cabc;
+        } else {
+            goto bad_cmd;
+        }
+        break;
+            
     case 0xb0:	/* CLKINT / DISCTL */
     case 0xb1:	/* CLKEXT */
-        if (s->pm < 0) {
+        if (!s->pm) {
+            /* ??? CLKINT/EXT not implemented ? */
+        } else if (s->pm < 0) {
             s->pm = 2;
         }
         break;
@@ -653,8 +729,10 @@ static uint32_t mipid_txrx(SPIDevice *spidev, uint32_t cmd, int len)
         break;
 
     case 0xc2:	/* IFMOD */
-        if (s->pm < 0) {
-            s->pm = 2;
+        if (!s->pm) {
+            /* ??? IFMOD not implemented? */
+        } else if (s->pm < 0) {
+            s->pm = (s->n900) ? 3 : 2;
         }
         break;
 
@@ -696,6 +774,7 @@ static int mipid_init(SPIDevice *spidev)
 
 static Property mipid_properties[] = {
     DEFINE_PROP_UINT32("id", struct mipid_s, id, 0),
+    DEFINE_PROP_UINT8("n900", struct mipid_s, n900, 0),
     DEFINE_PROP_END_OF_LIST()
 };
 
