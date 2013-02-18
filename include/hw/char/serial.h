@@ -90,6 +90,9 @@ void serial_change_char_driver(SerialState *s, CharDriverState *chr);
 const MemoryRegionOps *serial_get_memops(enum device_endian end);
 qemu_irq *serial_get_irq(SerialState *s);
 
+unsigned serial_rx_fifo_count(SerialState *s);
+unsigned serial_tx_fifo_count(SerialState *s);
+
 /* legacy pre qom */
 SerialState *serial_init(int base, qemu_irq irq, int baudbase,
                          CharDriverState *chr, MemoryRegion *system_io);
