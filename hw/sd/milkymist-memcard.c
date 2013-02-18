@@ -254,7 +254,7 @@ static int milkymist_memcard_init(SysBusDevice *dev)
     DriveInfo *dinfo;
 
     dinfo = drive_get_next(IF_SD);
-    s->card = sd_init(dinfo ? dinfo->bdrv : NULL, false);
+    s->card = sd_init(dinfo ? dinfo->bdrv : NULL, false, false);
     if (s->card == NULL) {
         return -1;
     }
