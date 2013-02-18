@@ -4,6 +4,7 @@
  *
  * Copyright (c) 2006 Andrzej Zaborowski  <balrog@zabor.org>
  * Copyright (c) 2007 CodeSourcery
+ * Copyright (c) 2009 Nokia Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -81,6 +82,7 @@ struct SDState {
     uint8_t scr[8];
     uint8_t cid[16];
     uint8_t csd[16];
+    uint8_t ext_csd[512];
     uint16_t rca;
     uint32_t card_status;
     uint8_t sd_status[64];
@@ -96,7 +98,7 @@ struct SDState {
     uint32_t pwd_len;
     uint8_t function_group[6];
 
-    bool spi;
+    bool spi, mmc;
     uint8_t current_cmd;
     /* True if we will handle the next command as an ACMD. Note that this does
      * *not* track the APP_CMD status bit!
@@ -112,6 +114,7 @@ struct SDState {
     uint8_t *buf;
 
     bool enable;
+    int buswidth, highspeed;
 };
 
 static void sd_set_mode(SDState *sd)
@@ -139,9 +142,9 @@ static void sd_set_mode(SDState *sd)
 }
 
 static const sd_cmd_type_t sd_cmd_type[64] = {
-    sd_bc,   sd_none, sd_bcr,  sd_bcr,  sd_none, sd_none, sd_none, sd_ac,
+    sd_bc,   sd_none, sd_bcr,  sd_bcr,  sd_none, sd_ac,   sd_none, sd_ac,
     sd_bcr,  sd_ac,   sd_ac,   sd_adtc, sd_ac,   sd_ac,   sd_none, sd_ac,
-    sd_ac,   sd_adtc, sd_adtc, sd_none, sd_none, sd_none, sd_none, sd_none,
+    sd_ac,   sd_adtc, sd_adtc, sd_none, sd_adtc, sd_none, sd_none, sd_adtc,
     sd_adtc, sd_adtc, sd_adtc, sd_adtc, sd_ac,   sd_ac,   sd_adtc, sd_none,
     sd_ac,   sd_ac,   sd_none, sd_none, sd_none, sd_none, sd_ac,   sd_none,
     sd_none, sd_none, sd_bc,   sd_none, sd_none, sd_none, sd_none, sd_none,
@@ -208,8 +211,8 @@ static void sd_set_ocr(SDState *sd)
 
 static void sd_set_scr(SDState *sd)
 {
-    sd->scr[0] = 0x00;		/* SCR Structure */
-    sd->scr[1] = 0x2f;		/* SD Security Support */
+    sd->scr[0] = 0x00; /* SCR v1.0, SD spec v1.0/1.01 */
+    sd->scr[1] = 0x25; /* erase=0, SD security v1.01, 1bit/4bit bus width */
     sd->scr[2] = 0x00;
     sd->scr[3] = 0x00;
     sd->scr[4] = 0x00;
@@ -220,7 +223,7 @@ static void sd_set_scr(SDState *sd)
 
 #define MID	0xaa
 #define OID	"XY"
-#define PNM	"QEMU!"
+#define PNM	"QEMU!!"
 #define PRV	0x01
 #define MDT_YR	2006
 #define MDT_MON	2
@@ -235,14 +238,23 @@ static void sd_set_cid(SDState *sd)
     sd->cid[5] = PNM[2];
     sd->cid[6] = PNM[3];
     sd->cid[7] = PNM[4];
-    sd->cid[8] = PRV;		/* Fake product revision (PRV) */
+    if (sd->mmc) {
+        sd->cid[8] = PNM[5];
+    } else {
+        sd->cid[8] = PRV;		/* Fake product revision (PRV) */
+    }
     sd->cid[9] = 0xde;		/* Fake serial number (PSN) */
     sd->cid[10] = 0xad;
     sd->cid[11] = 0xbe;
     sd->cid[12] = 0xef;
-    sd->cid[13] = 0x00 |	/* Manufacture date (MDT) */
-        ((MDT_YR - 2000) / 10);
-    sd->cid[14] = ((MDT_YR % 10) << 4) | MDT_MON;
+    if (sd->mmc) {
+        sd->cid[13] = 0x55;
+        sd->cid[14] = ((MDT_MON) << 4) | (MDT_YR - 1997);
+    } else {
+        sd->cid[13] = 0x00 |	/* Manufacture date (MDT) */
+            ((MDT_YR - 2000) / 10);
+        sd->cid[14] = ((MDT_YR % 10) << 4) | MDT_MON;
+    }
     sd->cid[15] = (sd_crc7(sd->cid, 15) << 1) | 1;
 }
 
@@ -264,7 +276,12 @@ static void sd_set_csd(SDState *sd, uint64_t size)
     uint32_t wpsize = (1 << (WPGROUP_SHIFT + 1)) - 1;
 
     if (size <= 0x40000000) {	/* Standard Capacity SD */
-        sd->csd[0] = 0x00;	/* CSD structure */
+        if (sd->mmc) {
+            sd->csd[0] = 0x80 | /* CSD structure: v1.2 */
+                         0x0c;  /* MMC v3.x */
+        } else {
+            sd->csd[0] = 0x00;  /* CSD structure: v0 */
+        }
         sd->csd[1] = 0x26;	/* Data read access-time-1 */
         sd->csd[2] = 0x00;	/* Data read access-time-2 */
         sd->csd[3] = 0x5a;	/* Max. data transfer rate */
@@ -290,25 +307,52 @@ static void sd_set_csd(SDState *sd, uint64_t size)
         sd->csd[14] = 0x00;	/* File format group */
         sd->csd[15] = (sd_crc7(sd->csd, 15) << 1) | 1;
     } else {			/* SDHC */
-        size /= 512 * 1024;
-        size -= 1;
-        sd->csd[0] = 0x40;
+        if (sd->mmc) {
+            sd->csd[0] = 0x90; /* CSD structure v1.2, MMC v4.0/4.1 */
+        } else {
+            sd->csd[0] = 0x40; /* CSD structure v1 */
+        }
         sd->csd[1] = 0x0e;
         sd->csd[2] = 0x00;
         sd->csd[3] = 0x32;
         sd->csd[4] = 0x5b;
         sd->csd[5] = 0x59;
-        sd->csd[6] = 0x00;
-        sd->csd[7] = (size >> 16) & 0xff;
-        sd->csd[8] = (size >> 8) & 0xff;
-        sd->csd[9] = (size & 0xff);
-        sd->csd[10] = 0x7f;
+        if (sd->mmc) {
+            sd->csd[6] = 0x03;
+            sd->csd[7] = 0xff;
+            sd->csd[8] = 0xff;
+            sd->csd[9] = 0xff;
+            sd->csd[10] = 0xff;
+        } else {
+            size /= 512 * 1024;
+            size -= 1;
+            sd->csd[6] = 0x00;
+            sd->csd[7] = (size >> 16) & 0xff;
+            sd->csd[8] = (size >> 8) & 0xff;
+            sd->csd[9] = (size & 0xff);
+            sd->csd[10] = 0x7f;
+        }
         sd->csd[11] = 0x80;
         sd->csd[12] = 0x0a;
         sd->csd[13] = 0x40;
         sd->csd[14] = 0x00;
         sd->csd[15] = 0x00;
-        sd->ocr |= 1 << 30;	/* High Capacity SD Memort Card */
+        sd->ocr |= 1 << 30;	/* High Capacity SD Memory Card */
+        if (sd->mmc) {
+            size /= 512;
+            sd->buswidth = 1; /* 4bit mode */
+            sd->highspeed = 0;
+            memset(sd->ext_csd, 0, 512);
+            sd->ext_csd[183] = sd->buswidth;
+            sd->ext_csd[185] = sd->highspeed;
+            sd->ext_csd[192] = 0x03; /* EXT_CSD v3 */
+            sd->ext_csd[196] = 0x03; /* supports 26MHz and 52MHz */
+            sd->ext_csd[212] = (size & 0xff);
+            sd->ext_csd[213] = (size >> 8) & 0xff;
+            sd->ext_csd[214] = (size >> 16) & 0xff;
+            sd->ext_csd[215] = (size >> 24) & 0xff;
+            sd->ext_csd[217] = 0x00; /* sleep/awake timeout */
+        }
     }
 }
 
@@ -452,7 +496,7 @@ static const BlockDevOps sd_block_ops = {
 
 static const VMStateDescription sd_vmstate = {
     .name = "sd-card",
-    .version_id = 1,
+    .version_id = 2,
     .minimum_version_id = 1,
     .fields = (VMStateField[]) {
         VMSTATE_UINT32(mode, SDState),
@@ -478,6 +522,7 @@ static const VMStateDescription sd_vmstate = {
         VMSTATE_UINT8_ARRAY(data, SDState, 512),
         VMSTATE_BUFFER_UNSAFE(buf, SDState, 1, 512),
         VMSTATE_BOOL(enable, SDState),
+        VMSTATE_UINT8_ARRAY_V(ext_csd, SDState, 512, 2),
         VMSTATE_END_OF_LIST()
     }
 };
@@ -493,6 +538,7 @@ SDState *sd_init(BlockDriverState *bs, bool is_spi, bool is_mmc)
     sd = (SDState *) g_malloc0(sizeof(SDState));
     sd->buf = qemu_blockalign(bs, 512);
     sd->spi = is_spi;
+    sd->mmc = is_mmc;
     sd->enable = true;
     sd->bdrv = bs;
     sd_reset(sd);
@@ -587,6 +633,46 @@ static void sd_function_switch(SDState *sd, uint32_t arg)
     crc = sd_crc16(sd->data, 64);
     sd->data[65] = crc >> 8;
     sd->data[66] = crc & 0xff;
+}
+
+static void mmc_function_switch(SDState *sd, uint32_t arg)
+{
+    enum {
+        cmd_set = 0,
+        set_bits,
+        clear_bits,
+        write_byte,
+
+        unknown
+    } mode = (arg >> 24);
+    if (mode >= unknown) {
+        fprintf(stderr, "%s: unknown mode 0x%02x\n", __FUNCTION__, mode);
+    } else {
+        if (mode == cmd_set) {
+            fprintf(stderr, "%s: command set change not implemented!\n",
+                    __FUNCTION__);
+        } else {
+            uint8_t index = (arg >> 16) & 0xff;
+            /* ignore writes to read-only fields */
+            if (index != 192 && index != 196 &&
+                (index < 212 || index > 215)) {
+                uint8_t value = (arg >> 8) & 0xff;
+                switch (mode) {
+                    case set_bits:
+                        sd->ext_csd[index] |= value;
+                        break;
+                    case clear_bits:
+                        sd->ext_csd[index] &= ~value;
+                        break;
+                    case write_byte:
+                        sd->ext_csd[index] = value;
+                        break;
+                    default:
+                        break;
+                }
+            }
+        }
+    }
 }
 
 static inline bool sd_wp_addr(SDState *sd, uint64_t addr)
@@ -689,9 +775,15 @@ static sd_rsp_type_t sd_normal_command(SDState *sd,
         break;
 
     case 1:	/* CMD1:   SEND_OP_CMD */
+        if (sd->mmc) {
+            if (sd->state == sd_idle_state) {
+                sd->state = sd_ready_state;
+                return sd_r3;
+            }
+            break;
+         }
         if (!sd->spi)
             goto bad_cmd;
-
         sd->state = sd_transfer_state;
         return sd_r1;
 
@@ -713,8 +805,12 @@ static sd_rsp_type_t sd_normal_command(SDState *sd,
             goto bad_cmd;
         switch (sd->state) {
         case sd_identification_state:
-        case sd_standby_state:
             sd->state = sd_standby_state;
+        case sd_standby_state:
+            if (sd->mmc) {
+                sd->rca = req.arg >> 16;
+                return sd_r1;
+            }
             sd_set_rca(sd);
             return sd_r6;
 
@@ -728,14 +824,26 @@ static sd_rsp_type_t sd_normal_command(SDState *sd,
             goto bad_cmd;
         switch (sd->state) {
         case sd_standby_state:
-            break;
+            return sd_r0;
 
         default:
             break;
         }
         break;
 
-    case 5: /* CMD5: reserved for SDIO cards */
+    case 5: /* CMD5: reserved for SDIO cards / SLEEP_AWAKE (MMC) */
+        if (sd->mmc) {
+            if (sd->rca != rca) {
+                return sd_r0;
+            }
+            if (req.arg & (1 << 15)) {
+                sd->state = sd_transfer_state;
+            } else {
+                sd->state = sd_standby_state;
+            }
+            return sd_r1b;
+        }
+        sd->card_status |= ILLEGAL_COMMAND;
         return sd_illegal;
 
     case 6:	/* CMD6:   SWITCH_FUNCTION */
@@ -743,11 +851,16 @@ static sd_rsp_type_t sd_normal_command(SDState *sd,
             goto bad_cmd;
         switch (sd->mode) {
         case sd_data_transfer_mode:
-            sd_function_switch(sd, req.arg);
-            sd->state = sd_sendingdata_state;
-            sd->data_start = 0;
-            sd->data_offset = 0;
-            return sd_r1;
+            if (sd->mmc) {
+                mmc_function_switch(sd, req.arg);
+                return sd_r1b;
+            } else {
+                sd_function_switch(sd, req.arg);
+                sd->state = sd_sendingdata_state;
+                sd->data_start = 0;
+                sd->data_offset = 0;
+                return sd_r1;
+            }
 
         default:
             break;
@@ -792,22 +905,30 @@ static sd_rsp_type_t sd_normal_command(SDState *sd,
         }
         break;
 
-    case 8:	/* CMD8:   SEND_IF_COND */
-        /* Physical Layer Specification Version 2.00 command */
-        switch (sd->state) {
-        case sd_idle_state:
-            sd->vhs = 0;
+    case 8:	/* CMD8:   SEND_IF_COND / SEND_EXT_CSD (MMC) */
+        if (sd->mmc) {
+            sd->state = sd_sendingdata_state;
+            memcpy(sd->data, sd->ext_csd, 512);
+            sd->data_start = addr;
+            sd->data_offset = 0;
+            return sd_r1;
+        } else {
+            /* Physical Layer Specification Version 2.00 command */
+            switch (sd->state) {
+            case sd_idle_state:
+                sd->vhs = 0;
 
-            /* No response if not exactly one VHS bit is set.  */
-            if (!(req.arg >> 8) || (req.arg >> ffs(req.arg & ~0xff)))
-                return sd->spi ? sd_r7 : sd_r0;
+                /* No response if not exactly one VHS bit is set.  */
+                if (!(req.arg >> 8) || (req.arg >> ffs(req.arg & ~0xff)))
+                    return sd->spi ? sd_r7 : sd_r0;
 
-            /* Accept.  */
-            sd->vhs = req.arg;
-            return sd_r7;
+                /* Accept.  */
+                sd->vhs = req.arg;
+                return sd_r7;
 
-        default:
-            break;
+            default:
+                break;
+            }
         }
         break;
 
@@ -967,7 +1088,32 @@ static sd_rsp_type_t sd_normal_command(SDState *sd,
         }
         break;
 
+    /* Block write commands (Class 3) */
+    case 20: /* CMD20: WRITE_DAT_UNTIL_STOP */
+        if (sd->mmc) {
+            if (sd->state == sd_transfer_state) {
+                sd->state = sd_sendingdata_state;
+                sd->data_start = req.arg;
+                sd->data_offset = 0;
+
+                if (sd->data_start + sd->blk_len > sd->size) {
+                    sd->card_status |= ADDRESS_ERROR;
+                }
+                return sd_r0;
+            }
+            break;
+        }
+        goto bad_cmd;
+
     /* Block write commands (Class 4) */
+    case 23: /* CMD23: SET_BLOCK_COUNT */
+        if (sd->mmc) {
+            sd->card_status |= ILLEGAL_COMMAND;
+            fprintf(stderr, "%s: CMD23 not implemented\n", __FUNCTION__);
+            return sd_r0;
+        }
+        goto bad_cmd;
+
     case 24:	/* CMD24:  WRITE_SINGLE_BLOCK */
         if (sd->spi)
             goto unimplemented_cmd;
@@ -1105,6 +1251,11 @@ static sd_rsp_type_t sd_normal_command(SDState *sd,
 
     /* Erase commands (Class 5) */
     case 32:	/* CMD32:  ERASE_WR_BLK_START */
+    case 35: /* CMD35: ERASE_GROUP_START */
+        if ((req.cmd == 35 && !sd->mmc) ||
+            (req.cmd == 32 && sd->mmc)) {
+            goto bad_cmd;
+        }
         switch (sd->state) {
         case sd_transfer_state:
             sd->erase_start = req.arg;
@@ -1116,6 +1267,11 @@ static sd_rsp_type_t sd_normal_command(SDState *sd,
         break;
 
     case 33:	/* CMD33:  ERASE_WR_BLK_END */
+    case 36: /* CMD36: ERASE_GROUP_END */
+        if ((req.cmd == 36 && !sd->mmc) ||
+            (req.cmd == 33 && sd->mmc)) {
+            goto bad_cmd;
+        }
         switch (sd->state) {
         case sd_transfer_state:
             sd->erase_end = req.arg;
@@ -1144,6 +1300,17 @@ static sd_rsp_type_t sd_normal_command(SDState *sd,
             break;
         }
         break;
+
+    /* Class 9 */
+    case 39: /* CMD39: FAST_IO */
+    case 40: /* CMD40: GO_IRQ_STATE */
+        if (sd->mmc) {
+            sd->card_status |= ILLEGAL_COMMAND;
+            fprintf(stderr, "%s: CMD%d not implemented\n",
+                    __FUNCTION__, req.cmd);
+            return sd_r0;
+        }
+        goto bad_cmd;
 
     /* Lock card commands (Class 7) */
     case 42:	/* CMD42:  LOCK_UNLOCK */
@@ -1538,6 +1705,11 @@ void sd_write_data(SDState *sd, uint8_t value)
         }
         break;
 
+    case 20: /* CMD20: WRITE_DAT_UNTIL_STOP */
+        if (!sd->mmc) {
+            goto unknown_command;
+        }
+        /* fall through */
     case 25:	/* CMD25:  WRITE_MULTIPLE_BLOCK */
         if (sd->data_offset == 0) {
             /* Start of the block - lets check the address is valid */
@@ -1628,6 +1800,7 @@ void sd_write_data(SDState *sd, uint8_t value)
         break;
 
     default:
+    unknown_command:
         fprintf(stderr, "sd_write_data: unknown command\n");
         break;
     }
@@ -1643,7 +1816,7 @@ uint8_t sd_read_data(SDState *sd)
         return 0x00;
 
     if (sd->state != sd_sendingdata_state) {
-        fprintf(stderr, "sd_read_data: not in Sending-Data state\n");
+        fprintf(stderr, "sd_read_data: not in Sending-Data state (state=%d)\n", sd->state);
         return 0x00;
     }
 
@@ -1660,6 +1833,16 @@ uint8_t sd_read_data(SDState *sd)
             sd->state = sd_transfer_state;
         break;
 
+    case 8: /* CMD8: SEND_EXT_CSD (MMC only) */
+        if (sd->mmc) {
+            ret = sd->data[sd->data_offset++];
+            if (sd->data_offset >= 512) {
+                sd->state = sd_transfer_state;
+            }
+        } else {
+            goto unknown_command;
+        }
+        break;
     case 9:	/* CMD9:   SEND_CSD */
     case 10:	/* CMD10:  SEND_CID */
         ret = sd->data[sd->data_offset ++];
@@ -1745,6 +1928,7 @@ uint8_t sd_read_data(SDState *sd)
         break;
 
     default:
+    unknown_command:
         fprintf(stderr, "sd_read_data: unknown command\n");
         return 0x00;
     }
@@ -1760,4 +1944,9 @@ bool sd_data_ready(SDState *sd)
 void sd_enable(SDState *sd, bool enable)
 {
     sd->enable = enable;
+}
+
+bool sd_is_mmc(SDState *sd)
+{
+    return sd->mmc;
 }
