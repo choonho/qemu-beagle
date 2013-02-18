@@ -150,6 +150,8 @@ typedef struct CPUARMState {
         uint32_t c1_coproc; /* Coprocessor access register.  */
         uint32_t c1_xscaleauxcr; /* XScale auxiliary control register.  */
         uint32_t c1_scr; /* secure config register.  */
+        uint32_t c1_sedbg; /* Secure debug enable register. */
+        uint32_t c1_nseac; /* Non-secure access control register. */
         uint32_t c2_base0; /* MMU translation table base 0.  */
         uint32_t c2_base0_hi; /* MMU translation table base 0, high 32 bits */
         uint32_t c2_base1; /* MMU translation table base 0.  */
@@ -465,6 +467,7 @@ enum arm_features {
     ARM_FEATURE_LPAE, /* has Large Physical Address Extension */
     ARM_FEATURE_V8,
     ARM_FEATURE_AARCH64, /* supports 64 bit mode */
+    ARM_FEATURE_TRUSTZONE, /* TrustZone Security Extensions. */
 };
 
 static inline int arm_feature(CPUARMState *env, int feature)
