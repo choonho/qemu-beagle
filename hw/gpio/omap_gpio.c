@@ -391,7 +391,7 @@ static void omap2_gpio_module_write(void *opaque, hwaddr addr,
     case 0x00:	/* GPIO_REVISION */
     case 0x14:	/* GPIO_SYSSTATUS */
     case 0x38:	/* GPIO_DATAIN */
-        OMAP_RO_REG(addr);
+        /* read-only, ignore quietly */
         break;
 
     case 0x10:	/* GPIO_SYSCONFIG */
@@ -537,7 +537,7 @@ static void omap2_gpio_module_writep(void *opaque, hwaddr addr,
     case 0x00:	/* GPIO_REVISION */
     case 0x14:	/* GPIO_SYSSTATUS */
     case 0x38:	/* GPIO_DATAIN */
-        OMAP_RO_REG(addr);
+        /* read-only, ignore quietly */
         break;
 
     case 0x10:	/* GPIO_SYSCONFIG */
