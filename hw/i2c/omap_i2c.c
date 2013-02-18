@@ -51,8 +51,11 @@ typedef struct OMAPI2CState {
     uint16_t test;
 } OMAPI2CState;
 
-#define OMAP2_INTR_REV	0x34
-#define OMAP2_GC_REV	0x34
+/* I2C controller revision register values */
+#define OMAP1_INTR_REV    0x11
+#define OMAP2_INTR_REV    0x34
+#define OMAP3_INTR_REV    0x3c
+#define OMAP3630_INTR_REV 0x40
 
 static void omap_i2c_interrupts_update(OMAPI2CState *s)
 {
@@ -266,7 +269,7 @@ static void omap_i2c_write(void *opaque, hwaddr addr,
         return;
 
     case 0x04:	/* I2C_IE */
-        s->mask = value & (s->revision < OMAP2_GC_REV ? 0x1f : 0x3f);
+        s->mask = value & (s->revision < OMAP2_INTR_REV ? 0x1f : 0x3f);
         break;
 
     case 0x08:	/* I2C_STAT */
