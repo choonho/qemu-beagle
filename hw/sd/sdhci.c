@@ -1148,7 +1148,7 @@ static void sdhci_initfn(SDHCIState *s)
 
     /* FIXME use a qdev drive property instead of drive_get_next() */
     di = drive_get_next(IF_SD);
-    s->card = sd_init(di ? blk_by_legacy_dinfo(di) : NULL, false);
+    s->card = sd_init(di ? blk_by_legacy_dinfo(di) : NULL, false, false);
     if (s->card == NULL) {
         exit(1);
     }

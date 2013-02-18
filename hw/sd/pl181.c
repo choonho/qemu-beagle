@@ -492,7 +492,8 @@ static int pl181_init(SysBusDevice *sbd)
     qdev_init_gpio_out(dev, s->cardstatus, 2);
     /* FIXME use a qdev drive property instead of drive_get_next() */
     dinfo = drive_get_next(IF_SD);
-    s->card = sd_init(dinfo ? blk_by_legacy_dinfo(dinfo) : NULL, false);
+    s->card = sd_init(dinfo ? blk_by_legacy_dinfo(dinfo) : NULL,
+                      false, false);
     if (s->card == NULL) {
         return -1;
     }

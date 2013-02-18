@@ -257,7 +257,7 @@ static int ssi_sd_init(SSISlave *d)
     s->mode = SSI_SD_CMD;
     /* FIXME use a qdev drive property instead of drive_get_next() */
     dinfo = drive_get_next(IF_SD);
-    s->sd = sd_init(dinfo ? blk_by_legacy_dinfo(dinfo) : NULL, true);
+    s->sd = sd_init(dinfo ? blk_by_legacy_dinfo(dinfo) : NULL, true, false);
     if (s->sd == NULL) {
         return -1;
     }

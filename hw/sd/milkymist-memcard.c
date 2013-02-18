@@ -258,7 +258,7 @@ static int milkymist_memcard_init(SysBusDevice *dev)
     /* FIXME use a qdev drive property instead of drive_get_next() */
     dinfo = drive_get_next(IF_SD);
     blk = dinfo ? blk_by_legacy_dinfo(dinfo) : NULL;
-    s->card = sd_init(blk, false);
+    s->card = sd_init(blk, false, false);
     if (s->card == NULL) {
         return -1;
     }
