@@ -2,7 +2,7 @@
  * TI TSC2005 emulator.
  *
  * Copyright (c) 2006 Andrzej Zaborowski  <balrog@zabor.org>
- * Copyright (C) 2008 Nokia Corporation
+ * Copyright (c) 2009-2010 Nokia Corporation
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as
@@ -234,29 +234,13 @@ static void tsc2005_write(TSC2005State *s, int reg, uint16_t data)
 static void tsc2005_pin_update(TSC2005State *s)
 {
     int64_t expires;
-    int pin_state;
-
-    switch (s->pin_func) {
-    case 0:
-        pin_state = !s->pressure && !!s->dav;
-        break;
-    case 1:
-    case 3:
-    default:
-        pin_state = !s->dav;
-        break;
-    case 2:
-        pin_state = !s->pressure;
-    }
-
-    if (pin_state != s->irq) {
-        s->irq = pin_state;
-        qemu_set_irq(s->pint, s->irq);
-    }
-
     switch (s->nextfunction) {
     case TSC_MODE_XYZ_SCAN:
     case TSC_MODE_XY_SCAN:
+            if (!s->pin_func && !s->dav) {
+                s->irq = 0;
+                qemu_set_irq(s->pint, s->irq);
+            }
         if (!s->host_mode && s->dav)
             s->enabled = 0;
         if (!s->pressure)
@@ -289,15 +273,15 @@ static void tsc2005_pin_update(TSC2005State *s)
         return;
     }
 
-    if (!s->enabled || s->busy)
-        return;
-
-    s->busy = 1;
-    s->precision = s->nextprecision;
-    s->function = s->nextfunction;
-    s->pdst = !s->pnd0;	/* Synchronised on internal clock */
-    expires = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) + (get_ticks_per_sec() >> 7);
-    timer_mod(s->timer, expires);
+    if (s->enabled && !s->busy) {
+        s->busy = 1;
+        s->precision = s->nextprecision;
+        s->function = s->nextfunction;
+        s->pdst = !s->pnd0;	/* Synchronised on internal clock */
+        expires = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL)
+            + (get_ticks_per_sec() >> 7);
+        timer_mod(s->timer, expires);
+    }
 }
 
 static void tsc2005_reset(TSC2005State *s)
@@ -404,6 +388,7 @@ uint32_t tsc2005_txrx(void *opaque, uint32_t value, int len)
 
 static void tsc2005_timer_tick(void *opaque)
 {
+    int pin_state;
     TSC2005State *s = opaque;
 
     /* Timer ticked -- a set of conversions has been finished.  */
@@ -411,10 +396,29 @@ static void tsc2005_timer_tick(void *opaque)
     if (!s->busy)
         return;
 
+    switch (s->pin_func) {
+    case 0:
+        pin_state = s->pressure || !s->dav;
+        break;
+    case 1:
+    case 3:
+    default:
+        pin_state = !s->dav;
+        break;
+    case 2:
+        pin_state = s->pressure;
+    }
     s->busy = 0;
-    s->dav |= mode_regs[s->function];
+    if (!s->dav) {
+        s->dav |= mode_regs[s->function];
+    }
     s->function = -1;
     tsc2005_pin_update(s);
+
+    if (pin_state != s->irq) {
+        s->irq = pin_state;
+        qemu_set_irq(s->pint, s->irq);
+    }
 }
 
 static void tsc2005_touchscreen_event(void *opaque,
