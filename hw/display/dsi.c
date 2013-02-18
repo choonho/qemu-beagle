@@ -130,6 +130,21 @@ int dsi_blt(DSIHost *host, int vc, void *data, int width, int height,
     return 0;
 }
 
+void dsi_bltdone(DSIHost *host, int vc)
+{
+    if (vc >=0 && vc < 4) {
+        DSIDevice *dev = host->device[vc];
+        if (dev) {
+            DSIDeviceClass *dc = DSI_DEVICE_GET_CLASS(dev);
+            dc->bltdone(dev);
+        } else {
+            DSI_ERROR_NODEVICE(vc);
+        }
+    } else {
+        hw_error("%s: invalid virtual channel id (%d)\n", __FUNCTION__, vc);
+    }
+}
+
 void dsi_te_trigger(const DSIDevice *dev)
 {
     if (dev && dev->host && dev->host->te_trigger) {
