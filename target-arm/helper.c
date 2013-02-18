@@ -543,13 +543,6 @@ static int pmintenclr_write(CPUARMState *env, const ARMCPRegInfo *ri,
     return 0;
 }
 
-static int vbar_write(CPUARMState *env, const ARMCPRegInfo *ri,
-                      uint64_t value)
-{
-    env->cp15.c12_vbar = value & ~0x1Ful;
-    return 0;
-}
-
 static int ccsidr_read(CPUARMState *env, const ARMCPRegInfo *ri,
                        uint64_t *value)
 {
@@ -1510,6 +1503,12 @@ static const ARMCPRegInfo lpae_cp_reginfo[] = {
     REGINFO_SENTINEL
 };
 
+static int vbar_write(CPUARMState *env, const ARMCPRegInfo *ri, uint64_t value)
+{
+    CPREG_FIELD32(env, ri) = value & ~0x1f;
+    return 0;
+}
+
 static const ARMCPRegInfo trustzone_cp_reginfo[] = {
     /* Dummy implementations of registers; we don't enforce the
      * 'secure mode only' access checks. TODO: revisit as part of
@@ -1529,7 +1528,8 @@ static const ARMCPRegInfo trustzone_cp_reginfo[] = {
       .fieldoffset = offsetof(CPUARMState, cp15.c12_vbar),
       .resetvalue = 0 },
     { .name = "MVBAR", .cp = 15, .crn = 12, .crm = 0, .opc1 = 0, .opc2 = 1,
-      .access = PL1_RW, .type = ARM_CP_CONST, .resetvalue = 0 },
+      .access = PL1_RW, .fieldoffset = offsetof(CPUARMState, cp15.c12_mvbar),
+      .writefn = vbar_write, .resetvalue = 0 },
     REGINFO_SENTINEL
 };
 
@@ -2204,6 +2204,8 @@ int bank_number(int mode)
         return 4;
     case ARM_CPU_MODE_FIQ:
         return 5;
+    case ARM_CPU_MODE_SMC:
+        return 6;
     }
     hw_error("bank number requested for bad CPSR mode value 0x%x\n", mode);
 }
@@ -2500,23 +2502,39 @@ void arm_cpu_do_interrupt(CPUState *cs)
         mask = CPSR_A | CPSR_I | CPSR_F;
         offset = 4;
         break;
+    case EXCP_SMC:
+        if (semihosting_enabled) {
+            cpu_abort(env, "SMC handling under semihosting not implemented\n");
+            return;
+        }
+        if ((env->uncached_cpsr & CPSR_M) == ARM_CPU_MODE_SMC) {
+            env->cp15.c1_scr &= ~1;
+        }
+        offset = env->thumb ? 2 : 0;
+        new_mode = ARM_CPU_MODE_SMC;
+        addr = 0x08;
+        mask = CPSR_A | CPSR_I | CPSR_F;
+        break;
     default:
         cpu_abort(env, "Unhandled exception 0x%x\n", env->exception_index);
         return; /* Never happens.  Keep compiler happy.  */
     }
-    /* High vectors.  */
-    if (env->cp15.c1_sys & (1 << 13)) {
-        /* when enabled, base address cannot be remapped.  */
-        addr += 0xffff0000;
+    if (arm_feature(env, ARM_FEATURE_TRUSTZONE)) {
+        if (new_mode == ARM_CPU_MODE_SMC ||
+            (env->uncached_cpsr & CPSR_M) == ARM_CPU_MODE_SMC) {
+            addr += env->cp15.c12_mvbar;
+        } else {
+            if (env->cp15.c1_sys & (1 << 13)) {
+                addr += 0xffff0000;
+            } else {
+                addr += env->cp15.c12_vbar;
+            }
+        }
     } else {
-        /* ARM v7 architectures provide a vector base address register to remap
-         * the interrupt vector table.
-         * This register is only followed in non-monitor mode, and has a secure
-         * and un-secure copy. Since the cpu is always in a un-secure operation
-         * and is never in monitor mode this feature is always active.
-         * Note: only bits 31:5 are valid.
-         */
-        addr += env->cp15.c12_vbar;
+        /* High vectors.  */
+        if (env->cp15.c1_sys & (1 << 13)) {
+            addr += 0xffff0000;
+        }
     }
     switch_mode (env, new_mode);
     env->spsr = cpsr_read(env);
