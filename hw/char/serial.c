@@ -674,6 +674,18 @@ void serial_exit_core(SerialState *s)
     qemu_unregister_reset(serial_reset, s);
 }
 
+/* Get number of stored bytes in receive fifo. */
+unsigned serial_rx_fifo_count(SerialState *s)
+{
+    return fifo8_num(&s->recv_fifo);
+}
+
+/* Get number of stored bytes in transmit fifo. */
+unsigned serial_tx_fifo_count(SerialState *s)
+{
+    return fifo8_num(&s->xmit_fifo);
+}
+
 /* Change the main reference oscillator frequency. */
 void serial_set_frequency(SerialState *s, uint32_t frequency)
 {
