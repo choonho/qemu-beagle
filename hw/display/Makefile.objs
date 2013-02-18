@@ -25,6 +25,7 @@ endif
 
 obj-$(CONFIG_OMAP) += omap_dss.o
 obj-$(CONFIG_OMAP) += omap_lcdc.o
+obj-$(CONFIG_OMAP) += dsi.o
 obj-$(CONFIG_PXA2XX) += pxa2xx_lcd.o
 obj-$(CONFIG_SM501) += sm501.o
 obj-$(CONFIG_TCX) += tcx.o
