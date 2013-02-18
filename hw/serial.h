@@ -88,6 +88,9 @@ extern const MemoryRegionOps serial_io_ops;
 void serial_init_core(SerialState *s);
 void serial_exit_core(SerialState *s);
 void serial_set_frequency(SerialState *s, uint32_t frequency);
+void serial_change_char_driver(SerialState *s, CharDriverState *chr);
+const MemoryRegionOps *serial_get_memops(enum device_endian end);
+qemu_irq *serial_get_irq(SerialState *s);
 
 /* legacy pre qom */
 SerialState *serial_init(int base, qemu_irq irq, int baudbase,
