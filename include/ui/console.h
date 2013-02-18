@@ -39,6 +39,12 @@ typedef struct QEMUPutMouseEntry {
     QTAILQ_ENTRY(QEMUPutMouseEntry) node;
 } QEMUPutMouseEntry;
 
+typedef struct QEMUPutKBDEntry {
+    QEMUPutKBDEvent *put_kbd_event;
+    void *opaque;
+    QTAILQ_ENTRY(QEMUPutKBDEntry) next;
+} QEMUPutKBDEntry;
+
 typedef struct QEMUPutLEDEntry {
     QEMUPutLEDEvent *put_led;
     void *opaque;
@@ -46,7 +52,7 @@ typedef struct QEMUPutLEDEntry {
 } QEMUPutLEDEntry;
 
 void qemu_add_kbd_event_handler(QEMUPutKBDEvent *func, void *opaque);
-void qemu_remove_kbd_event_handler(void);
+void qemu_remove_kbd_event_handler(QEMUPutKBDEvent *func, void *opaque);
 QEMUPutMouseEntry *qemu_add_mouse_event_handler(QEMUPutMouseEvent *func,
                                                 void *opaque, int absolute,
                                                 const char *name);

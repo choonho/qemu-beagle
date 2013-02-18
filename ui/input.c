@@ -29,8 +29,8 @@
 #include "qmp-commands.h"
 #include "qapi-types.h"
 
-static QEMUPutKBDEvent *qemu_put_kbd_event;
-static void *qemu_put_kbd_event_opaque;
+static QTAILQ_HEAD(, QEMUPutKBDEntry) kbd_handlers =
+    QTAILQ_HEAD_INITIALIZER(kbd_handlers);
 static QTAILQ_HEAD(, QEMUPutLEDEntry) led_handlers = QTAILQ_HEAD_INITIALIZER(led_handlers);
 static QTAILQ_HEAD(, QEMUPutMouseEntry) mouse_handlers =
     QTAILQ_HEAD_INITIALIZER(mouse_handlers);
@@ -290,14 +290,28 @@ void qmp_send_key(KeyValueList *keys, bool has_hold_time, int64_t hold_time,
 
 void qemu_add_kbd_event_handler(QEMUPutKBDEvent *func, void *opaque)
 {
-    qemu_put_kbd_event_opaque = opaque;
-    qemu_put_kbd_event = func;
+    QEMUPutKBDEntry *s;
+
+    if (func != NULL) {
+        s = g_malloc0(sizeof(QEMUPutKBDEntry));
+
+        s->put_kbd_event = func;
+        s->opaque = opaque;
+
+        QTAILQ_INSERT_TAIL(&kbd_handlers, s, next);
+    }
 }
 
-void qemu_remove_kbd_event_handler(void)
+void qemu_remove_kbd_event_handler(QEMUPutKBDEvent *func, void *opaque)
 {
-    qemu_put_kbd_event_opaque = NULL;
-    qemu_put_kbd_event = NULL;
+    QEMUPutKBDEntry *cursor, *cursor_next;
+    if (func != NULL) {
+        QTAILQ_FOREACH_SAFE(cursor, &kbd_handlers, next, cursor_next) {
+            if (cursor->put_kbd_event == func && cursor->opaque == opaque) {
+                QTAILQ_REMOVE(&kbd_handlers, cursor, next);
+            }
+        }
+    }
 }
 
 static void check_mode_change(void)
@@ -381,11 +395,12 @@ void qemu_remove_led_event_handler(QEMUPutLEDEntry *entry)
 
 void kbd_put_keycode(int keycode)
 {
+    QEMUPutKBDEntry *cursor;
     if (!runstate_is_running() && !runstate_check(RUN_STATE_SUSPENDED)) {
         return;
     }
-    if (qemu_put_kbd_event) {
-        qemu_put_kbd_event(qemu_put_kbd_event_opaque, keycode);
+    QTAILQ_FOREACH(cursor, &kbd_handlers, next) {
+        cursor->put_kbd_event(cursor->opaque, keycode);
     }
 }
 
