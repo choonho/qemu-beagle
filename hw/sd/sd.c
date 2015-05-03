@@ -389,7 +389,7 @@ static inline uint64_t sd_addr_to_wpnum(uint64_t addr)
     return addr >> (HWBLOCK_SHIFT + SECTOR_SHIFT + WPGROUP_SHIFT);
 }
 
-static void sd_reset(SDState *sd)
+void sd_reset(SDState *sd)
 {
     uint64_t size;
     uint64_t sect;
